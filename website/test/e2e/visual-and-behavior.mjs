@@ -974,7 +974,23 @@ async function waitForText(locator, pattern, message) {
   throw new Error(message);
 }
 
+// Wait for the faces the rendered page requests without requesting any other face.
+// Loading all 855 declared faces dominates this suite's run time because each case
+// starts in a fresh browser context with no font cache. Since document.fonts.ready
+// does not reject on a failed load, check for a face in error status so a page that
+// fell back from a failed face cannot pass as checked.
 async function waitForFonts(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    const failedFamilies = [...document.fonts].filter((font) => font.status === 'error').map((font) => font.family);
+    if (failedFamilies.length > 0) throw new Error(`Font loading failed: ${failedFamilies.join(', ')}`);
+  });
+}
+
+// Returns only after every declared face has loaded and rejects if any load fails.
+// Later demo phases reveal text the first paint did not use, so demo checks start
+// measuring only after all font traffic has finished.
+async function loadEveryFontFace(page) {
   await page.evaluate(async () => {
     await document.fonts.ready;
     for (const font of document.fonts) await font.load();
@@ -1406,12 +1422,13 @@ async function assertApprovedCopyAndNoClipping(browser) {
   }
 }
 
+// Load every face because these captures include demo phases whose text appears after load.
 async function captureBoundaryAndPhaseScreenshots(browser) {
   await mkdir(SCREENSHOT_DIRECTORY, { recursive: true });
   for (const [width, expectedColumns, browserPlacement] of [[1151, 2, '1 / -1'], [1152, 5, 'auto'], [799, 1, 'auto'], [800, 2, '1 / -1']]) {
     const context = await browser.newContext({ colorScheme: 'dark', viewport: { width, height: 900 } }); const page = await context.newPage();
     try {
-      await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await waitForFonts(page);
+      await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await loadEveryFontFace(page);
       const columns = await page.locator('.demo-stage').evaluate((node) => getComputedStyle(node).gridTemplateColumns.split(' ').length);
       assert.equal(columns, expectedColumns, `${width}px must use its specified stage grid.`);
       assert.equal(await page.locator('[data-exhibit="browser"]').evaluate((node) => getComputedStyle(node).gridColumn), browserPlacement);
@@ -1420,7 +1437,7 @@ async function captureBoundaryAndPhaseScreenshots(browser) {
   }
   const context = await browser.newContext({ colorScheme: 'dark', viewport: { width: 1440, height: 1100 } }); const page = await context.newPage();
   try {
-    await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await waitForFonts(page); await installPausedClock(page);
+    await page.goto(pageUrl('/'), { waitUntil: 'networkidle' }); await loadEveryFontFace(page); await installPausedClock(page);
     const { generate, run, status, demo } = demoControls(page);
     const captures = [['gen', generate, /generate/i, 'plan', 0], ['cast', null, /cast/i, 'plan', 2500], ['run', run, /replay/i, 'browser', 0], ['done', null, /exit 0/i, 'browser', 2500]];
     for (const [name, action, text, lit, advance] of captures) {
@@ -1573,11 +1590,104 @@ async function openDemoPage(browser) {
   page.on('pageerror', (error) => consoleErrors.push(error.message));
 
   await page.goto(pageUrl('/'), { waitUntil: 'networkidle' });
-  // Load CSS-declared faces before observing clicks so the request assertion measures the
-  // demo's behavior, including text that first becomes visible in later phases.
-  await waitForFonts(page);
+  // Callers assert zero foreign requests during demo actions.
+  await loadEveryFontFace(page);
 
   return { context, page, consoleErrors, ...demoControls(page) };
+}
+
+// Pin the separate font-loading contracts for rendered docs and later demo phases.
+async function assertFontLoadingScope(browser) {
+  const docsContext = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  try {
+    const page = await docsContext.newPage();
+    await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' });
+    const unloadedFaces = await page.evaluate(() => [...document.fonts]
+      .filter((face) => face.status === 'unloaded')
+      .map(({ family, weight, style, unicodeRange }) => ({ family, weight, style, unicodeRange })));
+    await waitForFonts(page);
+    const unusedStates = await page.evaluate((identities) => identities.map((identity) => [...document.fonts]
+      .find((face) => face.family === identity.family && face.weight === identity.weight
+        && face.style === identity.style && face.unicodeRange === identity.unicodeRange)?.status), unloadedFaces);
+    assert.ok(unusedStates.every((state) => state === 'unloaded'), 'Rendered docs case must keep every unused face unloaded.');
+    const states = await page.evaluate(() => [...document.fonts].map((face) => face.status));
+    assert.ok(states.length > 0, 'Rendered docs case must declare font faces.');
+    assert.ok(states.includes('unloaded'), 'Rendered docs case must leave unused faces unloaded.');
+    assert.ok(!states.includes('error'), 'Rendered docs case must have no failed faces.');
+  } finally {
+    await docsContext.close();
+  }
+
+  const { context: demoContext, page: demoPage } = await openDemoPage(browser);
+  try {
+    const states = await demoPage.evaluate(() => [...document.fonts].map((face) => face.status));
+    assert.ok(states.length > 0, 'Demo case must declare font faces.');
+    assert.ok(states.every((state) => state === 'loaded'), 'Demo case must load every declared face.');
+  } finally {
+    await demoContext.close();
+  }
+
+  const abortedContext = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  try {
+    let routeHit = false;
+    await abortedContext.route('https://fonts.gstatic.com/**', (route) => {
+      routeHit = true;
+      return route.abort();
+    });
+    const page = await abortedContext.newPage();
+    await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'networkidle' });
+    assert.ok(routeHit, 'Aborted font case must intercept a font request.');
+    assert.ok(await page.evaluate(() => [...document.fonts].some((face) => face.status === 'error')), 'Aborted font case must have a failed face.');
+    await assert.rejects(() => waitForFonts(page), 'Aborted font case must reject a failed font load in waitForFonts.');
+    await assert.rejects(() => loadEveryFontFace(page), 'Aborted font case must reject a failed font load in loadEveryFontFace.');
+  } finally {
+    await abortedContext.close();
+  }
+
+  const heldContext = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  let releaseResponses;
+  const responsesReleased = new Promise((resolve) => { releaseResponses = resolve; });
+  let markFirstHeldRequest;
+  const firstHeldRequest = new Promise((resolve) => { markFirstHeldRequest = resolve; });
+  try {
+    await heldContext.route('https://fonts.gstatic.com/**', async (route) => {
+      markFirstHeldRequest();
+      await responsesReleased;
+      await route.continue();
+    });
+    const page = await heldContext.newPage();
+    await page.goto(pageUrl('/tutorials/quick-start/'), { waitUntil: 'domcontentloaded' });
+    let firstHeldTimeout;
+    try {
+      await Promise.race([
+        firstHeldRequest,
+        new Promise((_, reject) => {
+          firstHeldTimeout = setTimeout(() => reject(new Error('Held font case timed out waiting for the first held font request.')), INTERACTION_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      clearTimeout(firstHeldTimeout);
+    }
+    let settled = false;
+    const waiting = waitForFonts(page).then(
+      () => { settled = true; },
+      (error) => { settled = true; throw error; },
+    );
+    // Observe rejections immediately while retaining the original promise for the final check.
+    void waiting.catch(() => {});
+    const status = await page.evaluate(() => document.fonts.status);
+    assert.equal(status, 'loading', 'Held font case must observe fonts loading before release.');
+    await page.evaluate(() => document.fonts.status);
+    assert.equal(settled, false, 'Held font case must keep the font wait pending before release.');
+    releaseResponses();
+    await assert.doesNotReject(() => waiting, 'Held font case must finish after responses are released.');
+    assert.equal(await page.evaluate(() => document.fonts.status), 'loaded', 'Held font case must finish loading after release.');
+    const states = await page.evaluate(() => [...document.fonts].map((face) => face.status));
+    assert.ok(!states.includes('error'), 'Held font case must have no failed faces after release.');
+  } finally {
+    releaseResponses();
+    await heldContext.close();
+  }
 }
 
 async function assertInteractiveBehavior(browser) {
@@ -2728,6 +2838,7 @@ async function main() {
     browser = await chromium.launch({ headless: true });
     await assertLocaleRoots(browser);
     await assertInteractiveBehavior(browser);
+    await assertFontLoadingScope(browser);
     for (const key of KEYBOARD_ACTIVATION_KEYS) {
       await assertGenerateKeyboardActivation(browser, key);
       await assertRunKeyboardActivation(browser, key);

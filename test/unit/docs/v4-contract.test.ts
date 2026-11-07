@@ -152,8 +152,15 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     const conformance = spec('conformance');
     for (const row of ['CON-19', 'CON-22']) {
       const line = conformance.split('\n').find((value) => value.startsWith(`| ${row} |`));
-      expect(line, row).toMatch(/`target`/);
-      expect(line, row).toMatch(/`timeoutMs`/);
+      expect(line, row).toMatch(/`element\.strategy`/);
+      expect(line, row).not.toMatch(/`target`/);
+      expect(line, row).not.toMatch(/`timeoutMs`/);
+    }
+    const secrets = spec('secrets');
+    for (const row of ['SEC-13', 'SEC-16']) {
+      const line = secrets.split('\n').find((value) => value.startsWith(`| ${row} |`));
+      expect(line, row).toMatch(/`element\.strategy`/);
+      expect(line, row).not.toMatch(/`target\.strategy`/);
     }
     const changelog = spec('changelog');
     expect(changelog).toMatch(/(?:Plan|plan)[^\n]*v4|v4[^\n]*(?:Plan|plan)/);

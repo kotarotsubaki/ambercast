@@ -55,7 +55,7 @@
 - [ambercast mcp](https://kotarotsubaki.github.io/ambercast/reference/cli/mcp/): Launch, transport, lifecycle, and client registration for the MCP server.
 
 ## PLAN SPECIFICATION
-- [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.9.0.
+- [Ambercast Plan Specification](https://kotarotsubaki.github.io/ambercast/spec/overview/): This specification describes the artifacts accepted by ambercast 0.10.0.
 - [Plan document](https://kotarotsubaki.github.io/ambercast/spec/plan-document/): This chapter defines `PlanDocument`, the committed plan file's top-level object, its minimal example, and the generation response that local generation turns into it.
 - [Steps](https://kotarotsubaki.github.io/ambercast/spec/steps/): This chapter defines every committed step kind, its fields and example, and the generated forms that local generation turns into committed steps.
 - [Value types](https://kotarotsubaki.github.io/ambercast/spec/value-types/): This chapter defines the shared objects and scalar contracts that the other chapters reference by name.

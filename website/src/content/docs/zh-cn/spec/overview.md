@@ -1,11 +1,11 @@
 ---
 title: "Ambercast 执行计划规范"
-description: "本规范描述了 ambercast 0.9.0 接受的工件。"
+description: "本规范描述了 ambercast 0.10.0 接受的工件。"
 ---
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.9.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
+本规范描述了 ambercast 0.10.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
 
 ## 规范性用语 {#normative-language}
 

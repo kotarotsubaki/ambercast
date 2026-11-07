@@ -1,11 +1,11 @@
 ---
 title: "Ambercast 計画仕様"
-description: "本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。"
+description: "本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。"
 ---
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.9.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
+本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
 
 ## 規範的文言 {#normative-language}
 

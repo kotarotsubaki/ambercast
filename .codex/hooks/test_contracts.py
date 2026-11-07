@@ -2331,9 +2331,9 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
             procedure = self.paragraph_after(
                 self.agents, "**Compatibility table and documentation updates before release**"
             )
-            for clause in (branch, "Never force-push", "no open PR", "base `main`", "autorelease: pending", "body release-please can parse", "no tag, GitHub Release, or npm publication"):
+            for clause in (branch, "Never force-push", "no open PR", "base `main`", "autorelease: pending", "body release-please can parse", "no tag, GitHub Release, or npm publication", "`## [<version>]` heading"):
                 self.assertIn(clause, procedure)
-            for clause in ("maintainers only", "maintainers-only", "agents cannot commit"):
+            for clause in ("maintainers only", "maintainers-only", "agents cannot commit", "compare link"):
                 self.assertNotIn(clause, procedure.lower())
             sensitive = self.section_between(self.agents, "Before a sensitive action", "An Auto-review denial")
             self.assertIn("Prior exact authorization is required", sensitive)

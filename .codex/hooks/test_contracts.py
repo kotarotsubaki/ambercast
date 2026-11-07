@@ -2315,7 +2315,7 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_release_branch_policy_stays_exact_and_docs_keep_merge_authorization(self) -> None:
-        """The loaded guard constant equals release-please--branches--main--components--ambercast and its source uses inequality rather than a prefix or regex, while the phase guard names no release-please exception. The release procedure names that exact branch, forbids force-push, removes maintainers-only and agents-cannot-commit restrictions, and requires no open PR, base main, and autorelease: pending for creation. Sensitive-action and release merge authorization remain present, the implementation skill removes Contents API guidance and names the step 2 exception, and the flow rule and Codex skill name the exception, so routine preparation cannot expand merge or source-edit authority."""
+        """The agent's release preparation exception must stay limited to an exact branch name and grant no merge or source-edit authority. The guard and policy documents must agree on these limits so neither drifts independently."""
         branch = "release-please--branches--main--components--ambercast"
         with self.subTest(contract="guard"):
             path = REPO_ROOT / ".claude/hooks/guard_git.py"

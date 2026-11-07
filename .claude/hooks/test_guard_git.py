@@ -147,7 +147,7 @@ class EvaluateTest(unittest.TestCase):
                 self.assertIsNone(self.evaluate(f"git -C {release} {operation}"))
 
     def test_release_branch_lookalikes_are_blocked(self) -> None:
-        """A table of truncated, suffixed, nested, case-changed, prefixed, other-base, and other-component release branch names rejects commits with does not match issues/<N> so the exception stays exact."""
+        """A name close to the release branch has no release PR tracking it, so only the exact name may receive the exception."""
         for index, branch in enumerate((
             "release-please--branches--main",
             "release-please--branches--main--components--ambercast-x",
@@ -223,7 +223,7 @@ class EvaluateTest(unittest.TestCase):
         self.assertIn("commits/pushes on main", result[1])
 
     def test_release_branch_exception_keeps_issue_branch_grammar(self) -> None:
-        """Commits on issues/12 and issues/12-schema pass while issues/12-, issues/12--a, and issues/12-A block because the issue branch grammar stays unchanged."""
+        """The release branch exception is a separate comparison and must leave the issue branch grammar exactly as strict as it was."""
         for index, branch in enumerate((
             "issues/12", "issues/12-schema", "issues/12-", "issues/12--a", "issues/12-A",
         )):

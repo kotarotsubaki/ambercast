@@ -2314,6 +2314,45 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
             REPO_ROOT / ".claude/rules/implementation-flow.md"
         ).read_text(encoding="utf-8")
 
+    def test_release_branch_policy_stays_exact_and_docs_keep_merge_authorization(self) -> None:
+        """The loaded guard constant equals release-please--branches--main--components--ambercast and its source uses inequality rather than a prefix or regex, while the phase guard names no release-please exception. The release procedure names that exact branch, forbids force-push, removes maintainers-only and agents-cannot-commit restrictions, and requires no open PR, base main, and autorelease: pending for creation. Sensitive-action and release merge authorization remain present, the implementation skill removes Contents API guidance and names the step 2 exception, and the flow rule and Codex skill name the exception, so routine preparation cannot expand merge or source-edit authority."""
+        branch = "release-please--branches--main--components--ambercast"
+        with self.subTest(contract="guard"):
+            path = REPO_ROOT / ".claude/hooks/guard_git.py"
+            spec = importlib.util.spec_from_file_location("contract_shared_guard_git", path)
+            assert spec is not None and spec.loader is not None
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(getattr(module, "RELEASE_BRANCH", None), branch)
+            self.assertRegex(path.read_text(encoding="utf-8"), r"branch\s*!=\s*RELEASE_BRANCH")
+        with self.subTest(contract="documents"):
+            phase = (REPO_ROOT / ".claude/hooks/guard_phase.py").read_text(encoding="utf-8")
+            self.assertNotIn("release-please", phase)
+            procedure = self.paragraph_after(
+                self.agents, "**Compatibility table and documentation updates before release**"
+            )
+            for clause in (branch, "Never force-push", "no open PR", "base `main`", "autorelease: pending"):
+                self.assertIn(clause, procedure)
+            for clause in ("maintainers only", "maintainers-only", "agents cannot commit"):
+                self.assertNotIn(clause, procedure.lower())
+            sensitive = self.section_between(self.agents, "Before a sensitive action", "An Auto-review denial")
+            self.assertIn("Prior exact authorization is required", sensitive)
+            self.assertIn("merging a release-please or other release-automation PR", sensitive)
+            self.assertIn("exact PR and version plus the tag, Release, and npm-publication side effects", sensitive)
+            release = self.paragraph_after(self.agents, "Releases are driven")
+            self.assertIn("release PR merge is never a routine PR operation", release)
+            self.assertIn("new direct authenticated-maintainer message in the active task naming the exact PR, version, tag, GitHub Release, and npm-publication side effects", release)
+            corrections = self.section_between(self.canonical, "Release corrections", "\n## ")
+            self.assertNotIn("Contents API", corrections)
+            self.assertIn("ordinary local commit and non-force push", corrections)
+            self.assertIn("Merging the release PR still needs the exact maintainer authorization", corrections)
+            self.assertIn("Hooks accept both forms for issue work and reject every other branch, except the exact release-please branch", self.canonical)
+            self.assertIn(branch, self.rule)
+            self.assertIn("The one exception is the documentation commit", self.rule)
+            self.assertIn("`src/`, `bin/`, and test edits stay blocked on that branch", self.rule)
+            self.assertIn("The one exception to that release-PR exclusion is the exact release-please branch", self.skill)
+            self.assertIn("commits, non-force pushes, and opening its PR when none is open are routine, and merging stays excluded", self.skill)
+
     def paragraph_after(self, text: str, anchor: str) -> str:
         return anchor + text.split(anchor, 1)[1].split("\n\n", 1)[0]
 
@@ -3138,7 +3177,7 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
                 "- Treat this directory as committed Claude Code configuration; keep local state in the gitignored paths listed below.",
                 "- Use `skills/implement/` for the mandatory 17-step `/implement` flow.",
                 "- Enforce flow-only implementation, no commits on main, and honest state files through `rules/implementation-flow.md`.",
-                "- Use `hooks/guard_git.py` to block commits and pushes on main, compound switch-and-commit commands, and commits outside `issues/<N>` or `issues/<N>-<slug>` branches.",
+                "- Use `hooks/guard_git.py` to block commits and pushes on main, compound switch-and-commit commands, and commits outside `issues/<N>`, `issues/<N>-<slug>`, and the release-please branch.",
                 "- Use `hooks/guard_phase.py` to block src, bin, and test edits until the required flow steps are complete across rebases and linked worktrees.",
                 "- Use `hooks/guard_stop.py` to keep unfinished implementation flows moving while allowing intentional pauses and live background work.",
                 "- Use `hooks/watch_progress.py` as the asyncRewake watchdog for stalled issue flows and idle orchestrators.",

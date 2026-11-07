@@ -7,7 +7,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 ## 公開メタデータ {#publication-metadata}
 
-現在の契約を表すスキーマは `main` 上に 4 つある。最新リリースより新しいスキーマバージョンは、リリースされた時点で[互換性](/ambercast/ja/reference/compatibility/#compatibility-table)に載る。
+現在の契約を表すスキーマは `main` 上に 4 つある。最新リリースより新しいスキーマバージョンは、リリースされた時点で[互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table)に載る。
 
 | artifact | 公開パスと `$id` | バージョン | `title` | `description` | スコープ | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -72,4 +72,4 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 
 - [レポート](/ambercast/ja/reference/reports/#errors)
 - [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
-- [よくある失敗のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+- [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)

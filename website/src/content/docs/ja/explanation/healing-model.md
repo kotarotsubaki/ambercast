@@ -59,4 +59,4 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 :::
 
-関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#confirmation)、[オペレーティングコントラクト](/ambercast/ja/agents/operating-contract/#command-contract)、[生成された差分をレビューする](/ambercast/ja/how-to/review-generated-diffs/)
+関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#confirmation)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)、[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)

@@ -17,7 +17,7 @@ description: 说明各软件包版本的产物格式兼容性，以及哪些变�
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 | `0.10.0` | `5` | `4` | `a11y-neighborhood-v2` | `3.11` |
 
-表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
+表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
 
 0.2.0 版本变更了 provider 请求契约，但没有递增执行计划的 schema 版本。该变更改变了 `producerBundleFingerprint` 和每个提示词的 `inputsDigest`，使 0.1.0 的执行计划变为陈旧状态，即 `stale`。详见[变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 

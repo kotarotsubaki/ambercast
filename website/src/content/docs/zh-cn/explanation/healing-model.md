@@ -35,7 +35,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 
 依次尝试从轻量到重量级的修复，是为了避免不必要的 AI 调用与开销。
 
-相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[重放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
+相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[回放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
 
 ## 限制修复次数与时长的预算 {#repair-budgets}
 

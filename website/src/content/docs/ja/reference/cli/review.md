@@ -17,7 +17,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast review` は現行版では実装されておらず、利用できる CLI コマンドでもない。提供は v2 で計画されている。利用できるコマンドは[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)に、現在ある結果の形は[レポート](/ambercast/ja/reference/reports/#result-shapes)にある。
+`ambercast review` は現行版では実装されておらず、利用できる CLI コマンドでもない。提供は v2 で計画されている。利用できるコマンドは[CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)に、現在ある結果の形は[レポート](/ambercast/ja/reference/reports/#result-shapes)にある。
 
 ## 計画中のインターフェース {#planned-interface}
 

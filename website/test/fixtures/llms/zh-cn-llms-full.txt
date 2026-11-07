@@ -256,7 +256,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    - 退出码 `0`，结果状态为 `generated`
    - 在生成的 prompt 旁写入执行计划和定位缓存两个派生文件 ([文件布局](/ambercast/zh-cn/reference/file-layout/#companions))
 
-   使用设置提示词 ([Agent 设置](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)) 的 agent 会假定服务已在运行，未经请求不会自行启动服务。
+   使用[设置提示词](/ambercast/zh-cn/agents/setup-prompt/#copy-paste-prompt)的 agent 会假定服务已在运行，未经请求不会自行启动服务。
 
 3. ## 重放测试 \{#run}
 
@@ -292,7 +292,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 接下来学习如何编写 prompt。
 
-<LinkCard title="编写有效的 prompt" href="/ambercast/zh-cn/how-to/write-effective-prompts/" description="学习编写易于审阅、聚焦明确的测试 prompt。" />
+<LinkCard title="编写高效的 Prompt" href="/ambercast/zh-cn/how-to/write-effective-prompts/" description="学习编写易于审阅、聚焦明确的测试 prompt。" />
 
 ---
 
@@ -337,7 +337,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 - 您能说出执行计划和定位缓存都位于 prompt 旁边。
 - 状态为 `fresh`。只有 `grounding.repositoryPolicy` 为 `uncommitted` 时才会出现 `fresh-without-grounding`，所以快速入门的默认配置得到的是 `fresh`。
-- 只有整份报告没有失败、用例错误和中断时，`check` 才以退出码 `0` 结束。用例新鲜并不能保证这一点，因为 `check` 还会扫描伴生文件中的孤立项。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+- 只有整份报告没有失败、用例错误和中断时，`check` 才以退出码 `0` 结束。用例新鲜并不能保证这一点，因为 `check` 还会扫描伴生文件中的孤立项。详见 [ambercast check](/ambercast/zh-cn/reference/cli/check/) 和[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
 
 ## 下一步 \{#next-steps}
 
@@ -436,7 +436,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
    范围内的已跟踪文件包括配置、改动的 UI 文件、执行计划和定位缓存。对其中每个改动的文件，展示 `git diff -- <path>`。对每个未跟踪的文件，展示完整内容或 `git diff --no-index /dev/null <path>`。展示完整的变更集后停下。
 
-   只有对话中明确要求时才提交。只有确认目标文件并获得明确批准后才回退。agent 的默认做法是展示差异，这能避免 agent 凭推断丢弃已有改动，详见[审阅生成的差异](/ambercast/zh-cn/how-to/review-generated-diffs/)。
+   只有对话中明确要求时才提交。只有确认目标文件并获得明确批准后才回退。agent 的默认做法是展示差异，这能避免 agent 凭推断丢弃已有改动，详见[审查生成的 diff](/ambercast/zh-cn/how-to/review-generated-diffs/)。
 
 </Steps>
 
@@ -486,7 +486,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 保持写回关闭 \{#keep-write-back-off}
 
-   不要添加 `--update-cache`。CI 默认 `ci.updateGroundingCache: false`，所以除非您的配置把它设为 `true`，作业不会写回定位缓存。具体条件见[控制定位缓存写回](/ambercast/zh-cn/how-to/control-grounding-writeback/)。
+   不要添加 `--update-cache`。CI 默认 `ci.updateGroundingCache: false`，所以除非您的配置把它设为 `true`，作业不会写回定位缓存。具体条件见[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)。
 
 3. ## 提交工作流 \{#commit-workflow}
 
@@ -568,7 +568,7 @@ npx ambercast generate tests/ambercast/checkout.test.md
 
 ## 相关链接 \{#related}
 
-<LinkCard title="Prompt 文件格式" href="/ambercast/zh-cn/reference/prompt-format/" description="了解文件识别规则和用例的读取方式。" />
+<LinkCard title="提示词文件格式" href="/ambercast/zh-cn/reference/prompt-format/" description="了解文件识别规则和用例的读取方式。" />
 
 <LinkCard title="执行计划中的机密" href="/ambercast/zh-cn/spec/secrets/" description="了解执行计划如何只通过引用处理机密。" />
 
@@ -1561,7 +1561,7 @@ ambercast 不再接受这种语法。请删除所有这样的行，然后按[迁
 
 - [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)
 - [环境变量](/ambercast/zh-cn/reference/environment-variables/#secrets)
-- [编写有效的提示词](/ambercast/zh-cn/how-to/write-effective-prompts/)
+- [编写高效的 Prompt](/ambercast/zh-cn/how-to/write-effective-prompts/)
 - [管理机密](/ambercast/zh-cn/how-to/manage-secrets/)
 - [执行计划中的机密](/ambercast/zh-cn/spec/secrets/)
 
@@ -2072,7 +2072,7 @@ Ambercast 从测试目录和运行目录解析所有伴生文件与运行产物�
 - [报告](/ambercast/zh-cn/reference/reports/#persistence)
 - [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity)
 - [在 Git 中管理产物](/ambercast/zh-cn/how-to/manage-artifacts-in-git/)
-- [计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
+- [执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
 
 ---
 
@@ -2158,7 +2158,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
 | `0.10.0` | `5` | `4` | `a11y-neighborhood-v2` | `3.11` |
 
-表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
+表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
 
 0.2.0 版本变更了 provider 请求契约，但没有递增执行计划的 schema 版本。该变更改变了 `producerBundleFingerprint` 和每个提示词的 `inputsDigest`，使 0.1.0 的执行计划变为陈旧状态，即 `stale`。详见[变更日志](/ambercast/zh-cn/reference/changelog/#release-020)。
 
@@ -2436,7 +2436,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 
 | 术语 | 规范性定义 | 所属 Schema / 命令 | 避免混淆的概念 |
 | --- | --- | --- | --- |
-| plan | 执行计划 (plan) 是一份符合 Schema 校验的 `PlanDocument`，其 `inputsDigest` 记录规范化 Prompt 的来源凭证，正文记录命名目标与可执行步骤。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | prompt 或 grounding |
+| plan | 执行计划 (plan) 是一份符合 Schema 校验的 `PlanDocument`，其 `inputsDigest` 记录规范化 Prompt 的来源凭证，正文记录命名目标与可执行步骤。 | `PlanDocument`；[执行计划文档](/ambercast/zh-cn/spec/plan-document/) | prompt 或 grounding |
 | grounding | 定位缓存 (grounding) 是针对每份执行计划独立的、符合 Schema 校验的缓存，其 `planDigest` 把以步骤为键的条目绑定到一份执行计划。 | `GroundingDocument`；[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/) | 执行计划或运行报告 |
 | artifact | 产物 (artifact) 是针对代码库内 `.test.md` Prompt 派生出的执行计划或定位缓存伴生文件。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | 运行凭据 |
 | fingerprint | 指纹 (fingerprint) 是一种元素定位值，包含字面量算法 `a11y-neighborhood-v2` 与一个 SHA-256 哈希值。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | `planDigest` |
@@ -2513,7 +2513,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `GroundingDocument` | `GroundingDocument` 是拥有定位缓存 `schemaVersion`、`planDigest` 与条目的严格 Schema。 | `GroundingDocument`；[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` 是针对执行中断的结构化环境错误代码。 | 报告 Schema；[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) | 断言失败 |
 | `JSON-RPC` | `JSON-RPC` 承载已实现的 MCP 服务器的 stdio 消息。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | CLI `--json` |
-| `PlanDocument` | `PlanDocument` 是拥有执行计划版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
+| `PlanDocument` | `PlanDocument` 是拥有执行计划版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[执行计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | 执行计划 Schema 版本 2 |
 | `ambercast` | `ambercast` 是软件包二进制文件名称和 CLI 程序。 | package / CLI 概览 | 某个产物 Schema |
@@ -3031,7 +3031,7 @@ init 总是把完整的变更计划打印到 stderr。在交互式终端中，�
 ## 另请参阅 {#see-also}
 
 - [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
-- [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
+- [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)
 - [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
 - [操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)
 
@@ -4099,7 +4099,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecyc
 
 这样可以避免把已损坏的执行计划报告为 `fresh`。
 
-相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复已过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
+相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
 
 ## 定位缓存如何绑定执行计划 {#grounding-binding}
 
@@ -4111,7 +4111,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/plan-lifecyc
 
 `check` 还会反向扫描。没有对应测试的产物会报告为 `orphaned-plan` 或 `orphaned-grounding`；无法反查到测试的名称会报告为 `invalid-artifact-name`。
 
-相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/#plan-digest)、[报告](/ambercast/zh-cn/reference/reports/#check-results)
+相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/#plan-digest)、[报告](/ambercast/zh-cn/reference/reports/#check-results)
 
 ## 新鲜度判定移交什么 {#freshness-handoff}
 
@@ -4134,7 +4134,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 `run` 为 `ai` 步骤和绑定元素的步骤读取定位缓存。绑定元素的步骤包括 click、press、fill、fill-secret 和 capture。导航和所有断言直接检查实时页面，不查询定位缓存。
 
-元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见 [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)。
+元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
 解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
@@ -4145,7 +4145,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 - 可恢复的未命中且带 `--resolve`：实时解析。
 - 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
 
-相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
+相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
 ## 定位缓存命中时 {#grounding-hit}
 
@@ -4218,7 +4218,7 @@ CI 中没有人实时查看结果，因此除非启用 `ci.heal` 配置，自愈
 
 依次尝试从轻量到重量级的修复，是为了避免不必要的 AI 调用与开销。
 
-相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[重放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
+相关链接：[ambercast heal](/ambercast/zh-cn/reference/cli/heal/#repair-model)、[步骤](/ambercast/zh-cn/spec/steps/)、[回放与定位缓存](/ambercast/zh-cn/explanation/replay-and-grounding/#drift-handoff)
 
 ## 限制修复次数与时长的预算 {#repair-budgets}
 
@@ -4318,7 +4318,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/determinism-
 
 写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 通常保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
-在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置参考](/ambercast/zh-cn/reference/configuration/#grounding)。
+在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。
 
 相关链接：[报告](/ambercast/zh-cn/reference/reports/#persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 

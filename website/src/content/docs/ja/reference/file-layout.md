@@ -20,10 +20,10 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 
 | 成果物 | 正確なパス | 書き込み元 / タイミング | コミットポリシー |
 | --- | --- | --- | --- |
-| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
 | 計画コンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規に生成した計画を書く。`heal` は承認された確定（settlement）の後にだけ置き換えられる。 | Ambercast はコミット済みの入力として扱う。リポジトリ操作は行わない。 |
 | グラウンディングコンパニオン | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` が作成または修復する。`run` は書き戻しポリシーに従い、変更されたグラウンディングを書くことがある。`heal` は確定後に置き換えられる。 | `grounding.repositoryPolicy` の既定値は `committed` で、`uncommitted` にもできる。Ambercast 自体はリポジトリ操作を行わない。 |
-| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
 | ケースディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` が、ケースのエビデンス収集にこのディレクトリを渡す。 | 呼び出しディレクトリと同じ。 |
 | 実行スクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` が、対象となる失敗したライブブラウザのステップに書く。シークレット検出により省略されることがある。 | 呼び出しディレクトリと同じ。 |
 | ヒール試行ディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` が試行ごとに正の序数を割り当てる。その試行のエビデンスとオーバーレイは、このディレクトリ配下に閉じ込める。 | 呼び出しディレクトリと同じ。 |
@@ -43,5 +43,5 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 - [設定](/ambercast/ja/reference/configuration/#key-table)
 - [レポート](/ambercast/ja/reference/reports/#persistence)
 - [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity)
-- [Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
+- [Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
 - [計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)

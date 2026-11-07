@@ -63,6 +63,6 @@ ambercast は、プロンプトから何かを取り出す前に、プロンプ�
 
 - [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)
 - [環境変数](/ambercast/ja/reference/environment-variables/#secrets)
-- [効果的なプロンプトの書き方](/ambercast/ja/how-to/write-effective-prompts/)
+- [効果的なプロンプトの作成](/ambercast/ja/how-to/write-effective-prompts/)
 - [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)
 - [計画におけるシークレット](/ambercast/ja/spec/secrets/)

@@ -55,7 +55,7 @@ CI などの非 TTY 環境では、`--yes` を渡さない限り init は呼び�
 
 ## 関連項目 {#see-also}
 
-- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)
 - [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
 - [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)

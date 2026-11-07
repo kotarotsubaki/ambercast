@@ -256,7 +256,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    - exit code `0`, result status `generated`
    - two derived files, plan and grounding, written beside the generated prompt ([File layout](/ambercast/reference/file-layout/#companions))
 
-   An agent using the setup prompt ([Agent setup](/ambercast/agents/setup-prompt/#copy-paste-prompt)) assumes the server is already running and does not start it without a request.
+   An agent that follows the [Setup prompt](/ambercast/agents/setup-prompt/#copy-paste-prompt) assumes the server is already running and does not start it without a request.
 
 3. ## Replay the test \{#run}
 
@@ -820,7 +820,7 @@ Default discovery matches `**/*.test.md` and ignores runs, plans, and grounding 
    }
    ```
 
-   A matching `testIgnore` excludes a path even when it also matches `testMatch`. See [discovery patterns](/ambercast/reference/discovery-patterns/) for the matching rules, and [Configuration](/ambercast/reference/configuration/) for how to write the file.
+   A matching `testIgnore` excludes a path even when it also matches `testMatch`. See [Discovery patterns](/ambercast/reference/discovery-patterns/) for the matching rules, and [Configuration](/ambercast/reference/configuration/) for how to write the file.
 
 4. ## Pass a path that starts with a hyphen \{#literal-dash-path}
 
@@ -1193,7 +1193,7 @@ Read the BREAKING entries before you upgrade, then regenerate plans as `check` d
 
 ## Prerequisites \{#prerequisites}
 
-A release whose BREAKING entry changes the producer fingerprint makes existing plans stale and requires regeneration. The 0.2.0 entry is an example: it names the `inputsDigest` impact. See the [changelog](/ambercast/reference/changelog/#release-020).
+A release whose BREAKING entry changes the producer fingerprint makes existing plans stale and requires regeneration. The 0.2.0 entry is an example: it names the `inputsDigest` impact. See the [Changelog](/ambercast/reference/changelog/#release-020).
 
 ## Steps \{#steps}
 
@@ -1380,7 +1380,7 @@ The package declares the `npm test`, `npm run typecheck`, and `npm run lint` scr
 
 ## Report a vulnerability \{#report-vulnerability}
 
-Report a vulnerability through GitHub Security Advisories, not a public issue. Send a private report with the version, a reproduction, and the impact. See the [security policy](/ambercast/reference/security-policy/).
+Report a vulnerability through GitHub Security Advisories, not a public issue. Send a private report with the version, a reproduction, and the impact. See the [Security policy](/ambercast/reference/security-policy/).
 
 ## Maintainer and agent workflow \{#maintainer-workflow}
 
@@ -3007,7 +3007,7 @@ The `.gitignore` unit is the comment `# ambercast run evidence` followed by the 
 
 init always prints the complete change plan to stderr. In an interactive terminal it then asks `Write these files? [y/N] `, and `--yes` skips that prompt.
 
-In CI or another non-TTY environment, init rejects the invocation unless you pass `--yes`. When a coding agent runs the command, `--yes` skips only the CLI prompt. It never replaces the human approval for the four file changes. See the [operating contract](/ambercast/agents/operating-contract/#command-contract).
+In CI or another non-TTY environment, init rejects the invocation unless you pass `--yes`. When a coding agent runs the command, `--yes` skips only the CLI prompt. It never replaces the human approval for the four file changes. See the [Operating contract](/ambercast/agents/operating-contract/#command-contract).
 
 ## Exit codes {#exit-codes}
 
@@ -4128,7 +4128,7 @@ Replay reuses what ambercast recorded. Where the record is missing or unusable, 
 
 `run` consumes grounding for `ai` steps and for element-binding steps: click, press, fill, fill-secret, and capture. Navigation and every assertion check the live page directly, without a grounding lookup.
 
-An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
+An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [Grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
 The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
 
@@ -4312,7 +4312,7 @@ Related: [ambercast check](/ambercast/reference/cli/check/#read-only-contract), 
 
 If the write fails, `run` returns the envelope with `reportPersistence: "failed"`. In that case only an otherwise-0 exit becomes 3. Exits 1, 2, 4, and 5 normally stay as they are. `not-attempted` means no write was tried, and `failed` means no partial content became visible.
 
-In CI, writing grounding back needs `--update-cache` or `ci.updateGroundingCache: true`. The [configuration reference](/ambercast/reference/configuration/#grounding) covers the details.
+In CI, writing grounding back needs `--update-cache` or `ci.updateGroundingCache: true`. [Configuration](/ambercast/reference/configuration/#grounding) covers the details.
 
 Related: [Reports](/ambercast/reference/reports/#persistence), [ambercast run](/ambercast/reference/cli/run/#grounding-write-back)
 
@@ -4626,7 +4626,7 @@ The [README](https://github.com/kotarotsubaki/ambercast#official-skill) covers t
 
 ## Intended role {#intended-role}
 
-The skill teaches the loop. The [setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary for one requested test. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
+The skill teaches the loop. For one requested test, the [Setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
 
 ambercast treats coding agents as first-class users next to the prompt and viewer surfaces for people.
 

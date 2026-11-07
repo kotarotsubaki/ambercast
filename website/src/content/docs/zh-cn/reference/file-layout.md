@@ -42,4 +42,4 @@ Ambercast 从测试目录和运行目录解析所有伴生文件与运行产物�
 - [报告](/ambercast/zh-cn/reference/reports/#persistence)
 - [提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity)
 - [在 Git 中管理产物](/ambercast/zh-cn/how-to/manage-artifacts-in-git/)
-- [计划生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)
+- [执行计划的生命周期与新鲜度](/ambercast/zh-cn/explanation/plan-lifecycle/)

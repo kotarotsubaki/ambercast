@@ -256,7 +256,7 @@ When I open the application, navigate to the search page, search for "ambercast"
    - 終了コード`0`、結果ステータス`generated`
    - 生成されたプロンプトの隣に、計画（plan）とグラウンディング（grounding）の2つの派生ファイルが書き出される（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)）
 
-   セットアッププロンプト（[エージェント向けセットアップ](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)）を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
+   [セットアッププロンプト](/ambercast/ja/agents/setup-prompt/#copy-paste-prompt)を使うエージェントは、サーバーが既に起動していると想定する。依頼が無い限り自分では起動しない。
 
 3. ## 再生を実行する \{#run}
 
@@ -292,7 +292,7 @@ When I open the application, navigate to the search page, search for "ambercast"
 
 次は、プロンプトの書き方を学ぶ。
 
-<LinkCard title="効果的なプロンプトを書く" href="/ambercast/ja/how-to/write-effective-prompts/" description="レビューしやすく焦点の定まったテストプロンプトを書くコツを確認する。" />
+<LinkCard title="効果的なプロンプトの作成" href="/ambercast/ja/how-to/write-effective-prompts/" description="レビューしやすく焦点の定まったテストプロンプトを書くコツを確認する。" />
 
 ---
 
@@ -486,7 +486,7 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 2. ## 書き戻しを有効にしない \{#keep-write-back-off}
 
-   `--update-cache` は付けない。CI の既定は `ci.updateGroundingCache: false` なので、設定で `true` にしない限り、ジョブはグラウンディングを書き戻さない。書き戻しの条件は[グラウンディングの書き戻しを制御する](/ambercast/ja/how-to/control-grounding-writeback/)で確かめられる。
+   `--update-cache` は付けない。CI の既定は `ci.updateGroundingCache: false` なので、設定で `true` にしない限り、ジョブはグラウンディングを書き戻さない。書き戻しの条件は[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)で確かめられる。
 
 3. ## ワークフローをコミットする \{#commit-workflow}
 
@@ -1491,7 +1491,7 @@ ambercast は、次の順でファイルを選ぶ。
 
 ## 関連項目 {#see-also}
 
-- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix)
+- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix)
 - [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language)
 - [環境変数](/ambercast/ja/reference/environment-variables/#configuration)
 - [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)
@@ -1561,7 +1561,7 @@ ambercast は、プロンプトから何かを取り出す前に、プロンプ�
 
 - [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)
 - [環境変数](/ambercast/ja/reference/environment-variables/#secrets)
-- [効果的なプロンプトの書き方](/ambercast/ja/how-to/write-effective-prompts/)
+- [効果的なプロンプトの作成](/ambercast/ja/how-to/write-effective-prompts/)
 - [シークレットの管理](/ambercast/ja/how-to/manage-secrets/)
 - [計画におけるシークレット](/ambercast/ja/spec/secrets/)
 
@@ -1622,7 +1622,7 @@ ambercast は、`testDir` からの相対パスに `testMatch` と `testIgnore` 
 
 - [設定](/ambercast/ja/reference/configuration/#key-table)
 - [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)
-- [実行するテストの選択](/ambercast/ja/how-to/select-tests/)
+- [実行するテストを選ぶ](/ambercast/ja/how-to/select-tests/)
 
 ---
 
@@ -1933,7 +1933,7 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 
 - [レポート](/ambercast/ja/reference/reports/#errors)
 - [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
-- [よくある失敗のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+- [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
 
 ---
 
@@ -1969,7 +1969,7 @@ CI やスクリプトは、終了コードを見て実行結果を判別でき�
 
 - [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)
 - [レポート](/ambercast/ja/reference/reports/#envelope)
-- [よくある失敗のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+- [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
 
 ---
 
@@ -2050,10 +2050,10 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 
 | 成果物 | 正確なパス | 書き込み元 / タイミング | コミットポリシー |
 | --- | --- | --- | --- |
-| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| プロンプト | `<testDir>/<dirs>/<name>.test.md` | ユーザーが書く入力。Ambercast は読み取る。 | リポジトリに関する判断はコード化されていない。手順は[Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
 | 計画コンパニオン | `<testDir>/<dirs>/<name>.ambercast.plan.json` | `generate` が新規に生成した計画を書く。`heal` は承認された確定（settlement）の後にだけ置き換えられる。 | Ambercast はコミット済みの入力として扱う。リポジトリ操作は行わない。 |
 | グラウンディングコンパニオン | `<testDir>/<dirs>/<name>.ambercast.grounding.json` | `generate` が作成または修復する。`run` は書き戻しポリシーに従い、変更されたグラウンディングを書くことがある。`heal` は確定後に置き換えられる。 | `grounding.repositoryPolicy` の既定値は `committed` で、`uncommitted` にもできる。Ambercast 自体はリポジトリ操作を行わない。 |
-| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
+| 呼び出しディレクトリ | `<runsDir>/<runId>/` | `run` と `heal` は、ケースのエビデンスに単一の呼び出し識別子を使う。run ID はタイムスタンプと UUID からなる安全なセグメントである。 | Ambercast はこのディレクトリにリポジトリポリシーを持たない。`ambercast init` は既定の `runsDir` に対して `tests/ambercast/.runs/` を `.gitignore` に追記する。手順は[Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)にある。 |
 | ケースディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/` | `run` が、ケースのエビデンス収集にこのディレクトリを渡す。 | 呼び出しディレクトリと同じ。 |
 | 実行スクリーンショット | `<runsDir>/<runId>/<test-relative-dir>/<name>/<stepId>.png` | `run` が、対象となる失敗したライブブラウザのステップに書く。シークレット検出により省略されることがある。 | 呼び出しディレクトリと同じ。 |
 | ヒール試行ディレクトリ | `<runsDir>/<runId>/<test-relative-dir>/<name>/attempt-<n>/` | `heal` が試行ごとに正の序数を割り当てる。その試行のエビデンスとオーバーレイは、このディレクトリ配下に閉じ込める。 | 呼び出しディレクトリと同じ。 |
@@ -2073,7 +2073,7 @@ Ambercast は、コンパニオンファイルと実行成果物のパスをす�
 - [設定](/ambercast/ja/reference/configuration/#key-table)
 - [レポート](/ambercast/ja/reference/reports/#persistence)
 - [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity)
-- [Git での成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
+- [Gitでの成果物の管理](/ambercast/ja/how-to/manage-artifacts-in-git/)
 - [計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/)
 
 ---
@@ -2085,7 +2085,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 ## 公開メタデータ {#publication-metadata}
 
-現在の契約を表すスキーマは `main` 上に 4 つある。最新リリースより新しいスキーマバージョンは、リリースされた時点で[互換性](/ambercast/ja/reference/compatibility/#compatibility-table)に載る。
+現在の契約を表すスキーマは `main` 上に 4 つある。最新リリースより新しいスキーマバージョンは、リリースされた時点で[互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table)に載る。
 
 | artifact | 公開パスと `$id` | バージョン | `title` | `description` | スコープ | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2467,7 +2467,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/
 | consent | 同意とは、`generate` が `secrets.allow` の外にあるシークレット名を含む候補を永続化する前に必要な、対話式の判断である。 | `ambercast generate`; [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) | 実行時のシークレット値解決 |
 | allowlist | 許可リストとは、生成が候補を永続化する前に `secrets.allow` が受け入れる、レビュー済みの論理シークレット名の集合である。 | 設定 / `ambercast generate`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | シークレットシンクのオリジン |
 | `secrets.allow` | `secrets.allow` は、事前承認済みの論理シークレット名を並べる設定の配列である。高リスクな `"*"` を指定すると、AI が提案したすべての名前を名前ごとのレビューなしで受け入れる。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` の値 |
-| `SecretNameChoice` | `SecretNameChoice` は、投影された `allowedName` と新しい `nameHint` のどちらかを選ぶ、プロバイダー向けの厳格な選択である。コミット済みの `SecretRef` が存在する前に、どちらもローカルで解決する。 | `SecretNameChoice`; [値の型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
+| `SecretNameChoice` | `SecretNameChoice` は、投影された `allowedName` と新しい `nameHint` のどちらかを選ぶ、プロバイダー向けの厳格な選択である。コミット済みの `SecretRef` が存在する前に、どちらもローカルで解決する。 | `SecretNameChoice`; [値型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
 
 `stale` はcheckの結果に属するステータスであり、runの結果ステータスではない。healの冪等ターゲットの検査をスキップするのはリストモードのときである。
 
@@ -2748,7 +2748,7 @@ Heal configuration:
 詳細は次のページにある。
 
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
-- [探索パターン](/ambercast/ja/reference/discovery-patterns/#selection)
+- [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)
 - [ambercast init](/ambercast/ja/reference/cli/init/#flags)
 - [ambercast generate](/ambercast/ja/reference/cli/generate/#flags)
 - [ambercast run](/ambercast/ja/reference/cli/run/#flags)
@@ -2791,7 +2791,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/generate/
 
 生成は、候補を作ってから同意を取る順で進む。まず候補の計画を作り、`secrets.allow` に無いシークレット名を見つけ、計画かグラウンディングを書く前に対話で承認を求める。`--force` でも、新しい計画を再生成するときは同じ同意の境界に従う。`--dry-run` は成果物を書かず、同意も保存しない。
 
-非対話の環境や、同意を断った場合は、許可されていない候補が `SECRET_CONSENT_REQUIRED` で失敗し、終了コード `2` になる。CI で実行する前に、確認済みの名前を `secrets.allow` に加える。`"*"` は名前ごとの確認を省いて AI が提案したどの名前も受け入れるため、強いリスクを伴う。安全な手順は[シークレットを管理する](/ambercast/ja/how-to/manage-secrets/)を参照する。
+非対話の環境や、同意を断った場合は、許可されていない候補が `SECRET_CONSENT_REQUIRED` で失敗し、終了コード `2` になる。CI で実行する前に、確認済みの名前を `secrets.allow` に加える。`"*"` は名前ごとの確認を省いて AI が提案したどの名前も受け入れるため、強いリスクを伴う。安全な手順は[シークレットの管理](/ambercast/ja/how-to/manage-secrets/)を参照する。
 
 ## 副作用と終了コード {#side-effects}
 
@@ -3032,7 +3032,7 @@ CI などの非 TTY 環境では、`--yes` を渡さない限り init は呼び�
 
 ## 関連項目 {#see-also}
 
-- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)
 - [5分で動かす最初のテスト](/ambercast/ja/tutorials/quick-start/)
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
 - [オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)
@@ -3093,7 +3093,7 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `view` は、ネットワークポートを使う ambercast 唯一のコマンドである。MCP サーバーは stdio を使う。
 
-関連ページ: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
+関連ページ: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
 
 ---
 
@@ -3162,7 +3162,7 @@ Claude Desktop は、設定に同じサーバーのエントリを書けば使�
 | CLI の入力フラグは未規定 | ツールの入力に `headed`・`list`・`stale`・`json`・`yes`・`configPath` は含まない |
 | 終了コードはレポートから推測する | `_meta.exitCode` が明示的に運ぶ |
 
-関連ページ: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+関連ページ: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)
 
 ---
 
@@ -4262,7 +4262,7 @@ CI（自動テストの実行環境）では、人がその場で結果を見て
 
 :::
 
-関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#confirmation)、[オペレーティングコントラクト](/ambercast/ja/agents/operating-contract/#command-contract)、[生成された差分をレビューする](/ambercast/ja/how-to/review-generated-diffs/)
+関連リンク: [ambercast heal](/ambercast/ja/reference/cli/heal/#confirmation)、[オペレーション規約](/ambercast/ja/agents/operating-contract/#command-contract)、[生成された差分のレビュー](/ambercast/ja/how-to/review-generated-diffs/)
 
 ---
 
@@ -4400,7 +4400,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ブラウザーはChromiumだけに対応する。
 
-1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 
@@ -4408,7 +4408,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 `review` と、baseline/restoreは計画中だ。ブラウザーは、FirefoxとWebKitへの対応を計画している。クラウド版も計画している。MCPツールは、すでに使える。
 
-関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCPサーバー](/ambercast/ja/agents/mcp-server/)
+関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}
 
@@ -4591,7 +4591,7 @@ Read every errors[].code.
 - `check`は`fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`を使う。
 - `heal`の完了した行は`status: completed`で、`repairOutcome`が`healed`、`partially-healed`、`unresolved`、`no-changes-needed`のいずれかになる。`listed`と`skipped`の行は識別情報だけを持つ。
 
-関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画（plan）のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
+関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
 
 ## 終了コードはバッチ全体の合図 {#exit-code-signal}
 

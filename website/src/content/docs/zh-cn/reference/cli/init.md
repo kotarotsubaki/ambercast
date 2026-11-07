@@ -56,6 +56,6 @@ init 总是把完整的变更计划打印到 stderr。在交互式终端中，�
 ## 另请参阅 {#see-also}
 
 - [CLI 概览](/ambercast/zh-cn/reference/cli/overview/#command-surface)
-- [5 分钟完成您的首个测试](/ambercast/zh-cn/tutorials/quick-start/)
+- [5 分钟内完成第一个测试](/ambercast/zh-cn/tutorials/quick-start/)
 - [配置](/ambercast/zh-cn/reference/configuration/#file-selection)
 - [操作契约](/ambercast/zh-cn/agents/operating-contract/#command-contract)

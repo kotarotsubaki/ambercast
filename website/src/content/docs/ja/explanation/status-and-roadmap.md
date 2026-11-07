@@ -11,7 +11,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 ブラウザーはChromiumだけに対応する。
 
-1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
+1.0より前は、マイナーリリースにも破壊的変更が入りうる。計画のスキーマやプロデューサー契約のように鮮度の入力が変わると、既存の計画の再生成が必要になる。レポートのスキーマだけが変わる場合は、レポートの利用側の更新だけが必要だ。たとえば0.2.0では、プロデューサー契約の変更で0.1.0の計画が `stale` になった。どの版で再生成が必要になるかは、[互換性と再生成](/ambercast/ja/reference/compatibility/#regeneration-boundary)と[0.2.0の変更履歴](/ambercast/ja/reference/changelog/#release-020)で確かめられる。
 
 関連リンク: [CLIの概要](/ambercast/ja/reference/cli/overview/)、[互換性と再生成](/ambercast/ja/reference/compatibility/)、[変更履歴](/ambercast/ja/reference/changelog/)
 
@@ -19,7 +19,7 @@ CLIパーサーは、`init`、`generate`、`run`、`check`、`heal`、`view`、`
 
 `review` と、baseline/restoreは計画中だ。ブラウザーは、FirefoxとWebKitへの対応を計画している。クラウド版も計画している。MCPツールは、すでに使える。
 
-関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCPサーバー](/ambercast/ja/agents/mcp-server/)
+関連リンク: [ambercast review](/ambercast/ja/reference/cli/review/)、[MCP サーバー](/ambercast/ja/agents/mcp-server/)
 
 ## バージョン方針 {#version-policy}
 

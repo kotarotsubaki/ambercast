@@ -2156,6 +2156,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/compatibility/
 | `0.7.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.8` |
 | `0.8.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.9` |
 | `0.9.0` | `5` | `3` | `a11y-neighborhood-v2` | `3.10` |
+| `0.10.0` | `5` | `4` | `a11y-neighborhood-v2` | `3.11` |
 
 表中列出 0.1.0、0.2.0、从 0.8.0 起的所有发布版本，以及每个变更了执行计划或定位缓存 schema 版本的发布版本。最新发布版本之后 `main` 上新增的 schema 版本，会在发布时加入此表。当前已发布的 schema 请参阅 [JSON Schema](/ambercast/zh-cn/reference/json-schemas/#publication-metadata)。
 
@@ -2498,7 +2499,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 | `.runs` | `.runs` 是默认 `runsDir` 的末尾路径段，并非独立解析的根目录。 | 配置 / [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts) | 伴生产物 |
 | `.test.md` | `.test.md` 是已发现 Prompt 路径获取布局映射所需的确切后缀。 | 布局解析器；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#file-identity) | 任意 Markdown |
 | `0.1.0` | `0.1.0` 指代版本库更新日志中 2026-09-03 的发布版本。 | [变更日志](/ambercast/zh-cn/reference/changelog/#release-010) | 产物 Schema 版本 |
-| `0.9.0` | `0.9.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.10` |
+| `0.10.0` | `0.10.0` 是本参考文档集所记录的当前软件包版本。 | package / [兼容性](/ambercast/zh-cn/reference/compatibility/#compatibility-table) | 报告 `3.11` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` 是进程退出码从强到弱的固定优先级顺序。 | 退出码选择器；[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority) | 数值大小顺序 |
 | `@ambercast-secret` | `@ambercast-secret` 是被拒绝的旧式 Prompt 语法，必须在重新生成执行计划 v3 产物前移除。 | Prompt 解析器；[迁移机密授权](/ambercast/zh-cn/how-to/upgrade/#migrate-secret-grants) | 机密引用 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` 提供环境变量级别的 Provider 覆盖。 | 配置环境变量；[环境变量](/ambercast/zh-cn/reference/environment-variables/#configuration) | CLI `--ai` |
@@ -3168,7 +3169,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.9.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
+本规范描述了 ambercast 0.10.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
 
 ## 规范性用语 {#normative-language}
 

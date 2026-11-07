@@ -2,7 +2,7 @@
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.9.0. The implementation accepts Plan schema version 5 and Grounding schema version 4. [repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
+This specification describes the artifacts accepted by ambercast 0.10.0. The implementation accepts Plan schema version 5 and Grounding schema version 4. [repo:src/core/ir/schema.ts:62] [repo:src/core/ir/schema.ts:74]
 
 ## Normative language {#normative-language}
 

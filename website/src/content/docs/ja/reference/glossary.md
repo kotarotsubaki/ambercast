@@ -74,7 +74,7 @@ description: ambercast 全体で使う用語の規範的な定義と、翻訳で
 | `.runs` | `.runs` はデフォルトの `runsDir` の最終セグメントであり、独立して解決されるルートではない。 | 設定 / [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts) | コンパニオンアーティファクト |
 | `.test.md` | `.test.md` は、検出されたプロンプトパスがレイアウトマッピングを受け取るために必要な正確なサフィックスである。 | レイアウト解決ツール; [プロンプトファイルのフォーマット](/ambercast/ja/reference/prompt-format/#file-identity) | 任意のMarkdown |
 | `0.1.0` | `0.1.0` はリポジトリのチェンジログに記載されている2026-09-03のリリースを示す。 | [変更履歴](/ambercast/ja/reference/changelog/#release-010) | アーティファクトのスキーマバージョン |
-| `0.9.0` | `0.9.0` は、このリファレンス群が対象とする現在のパッケージバージョンである。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.10` |
+| `0.10.0` | `0.10.0` は、このリファレンス群が対象とする現在のパッケージバージョンである。 | パッケージ / [互換性と再生成](/ambercast/ja/reference/compatibility/#compatibility-table) | レポートの `3.11` |
 | `2 > 3 > 4 > 1 > 5 > 0` | `2 > 3 > 4 > 1 > 5 > 0` は、最も強い優先度から最も弱い優先度への固定されたプロセス終了コードの優先順位である。 | 終了コードセレクター; [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) | 数値順 |
 | `@ambercast-secret` | `@ambercast-secret` は拒否されるレガシープロンプト構文であり、計画 v3 のアーティファクトを再生成する前に除去する必要がある。 | プロンプトパーサー; [シークレットグラントの移行](/ambercast/ja/how-to/upgrade/#migrate-secret-grants) | シークレット参照 |
 | `AMBERCAST_AI_PROVIDER` | `AMBERCAST_AI_PROVIDER` は、環境変数によるプロバイダーのオーバーライドを指定する。 | 設定環境変数; [環境変数](/ambercast/ja/reference/environment-variables/#configuration) | CLI `--ai` |

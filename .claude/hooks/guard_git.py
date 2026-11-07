@@ -3,7 +3,9 @@
 
 Blocks (exit 2):
 - `git commit` / `git push` while the repository is on `main`
-- `git commit` on any branch not named `issues/<N>` or `issues/<N>-<slug>`
+- `git commit` outside `issues/<N>`, `issues/<N>-<slug>`, and the exact release-please branch
+- compound switch-and-commit commands, including switches to the release-please branch
+- Git-bearing commands too complex to classify, including on the release-please branch
 
 Branch grammar: ASCII digits, slug words are lowercase alphanumerics joined
 by single hyphens. Accepted: issues/12, issues/12-schema, issues/12-fix-login.
@@ -102,6 +104,10 @@ import shlex
 import subprocess
 import sys
 
+
+# The release procedure permits agent commits on the branch release-please owns.
+# Exact comparison excludes look-alike branches that no release PR tracks.
+RELEASE_BRANCH = "release-please--branches--main--components--ambercast"
 
 ASSIGNMENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*", re.S)
 PROMOTION_RE = re.compile(
@@ -630,9 +636,13 @@ def evaluate(command: str, data: dict) -> tuple[int, str] | None:
             proj, tier, branch,
         )
 
-    if is_commit and not re.fullmatch(r"issues/[0-9]+(?:-[a-z0-9]+)*", branch):
+    if (
+        is_commit
+        and branch != RELEASE_BRANCH
+        and not re.fullmatch(r"issues/[0-9]+(?:-[a-z0-9]+)*", branch)
+    ):
         return 2, _block_message(
-            f"branch '{branch}' does not match issues/<N> or issues/<N>-<slug>. "
+            f"branch '{branch}' does not match issues/<N>, issues/<N>-<slug>, or the release-please branch. "
             "The /implement flow requires one branch per GitHub issue (stack layers "
             "use the issues/<N>-<slug> form).",
             proj, tier, branch,

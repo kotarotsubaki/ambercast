@@ -184,6 +184,19 @@ class GitEnvironmentTests(unittest.TestCase):
 
 
 class GitAdapterTests(AdapterRepositoryCase):
+    def test_release_branch_commit_policy_through_adapter(self) -> None:
+        """The Codex adapter allows git commit --dry-run on the exact release-please branch and blocks a look-alike because the adapter must preserve the shared branch boundary."""
+        branch = "release-please--branches--main--components--ambercast"
+        for name, expected in ((branch, 0), (branch + "-x", 2)):
+            with self.subTest(branch=name):
+                self.checkout(name)
+                result = self.run_hook("guard_git.py", self.payload("git commit --dry-run"))
+                self.assertEqual(result.returncode, expected, result.stderr)
+                if expected == 2:
+                    self.assertIn("does not match issues/<N>", result.stderr)
+                else:
+                    self.assertEqual(result.stderr, "")
+
     def payload(self, command: object = "git status", **tool: object) -> dict:
         return {
             "cwd": str(self.root),

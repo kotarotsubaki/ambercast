@@ -2331,7 +2331,7 @@ class SkillAndRepositoryContractTests(unittest.TestCase):
             procedure = self.paragraph_after(
                 self.agents, "**Compatibility table and documentation updates before release**"
             )
-            for clause in (branch, "Never force-push", "no open PR", "base `main`", "autorelease: pending"):
+            for clause in (branch, "Never force-push", "no open PR", "base `main`", "autorelease: pending", "body release-please can parse", "no tag, GitHub Release, or npm publication"):
                 self.assertIn(clause, procedure)
             for clause in ("maintainers only", "maintainers-only", "agents cannot commit"):
                 self.assertNotIn(clause, procedure.lower())

@@ -38,18 +38,6 @@ const parity = async (files: Record<string, string>, dataFiles = figureTree()) =
   });
 };
 
-const mermaidFence = (body: string) => `\`\`\`mermaid alt="Diagram"\n${body}\n\`\`\``;
-const textFence = (body: string) => `\`\`\`txt\n${body}\n\`\`\``;
-const diagramParity = (kind: 'guide' | 'spec', en: string, ja: string) => kind === 'guide'
-  ? parity(tree(page(en), page(ja)))
-  : parity({ ...tree(page('# Guide')), 'docs/spec/overview.md': en, 'website/src/content/docs/ja/spec/overview.md': ja, 'website/src/content/docs/zh-cn/spec/overview.md': en });
-
-describe.each([['guide', 'fence-content'], ['spec', 'spec-code-blocks']] as const)('Mermaid parity on %s', (kind, rule) => {
-  it('ignores differences confined to Mermaid bodies', async () => { expect(await diagramParity(kind, mermaidFence('graph TD\nA-->B'), mermaidFence('graph TD\nA-->C'))).toEqual([]); });
-  it('reports only a changed non-Mermaid fence beside an identical diagram', async () => { const en = `${textFence('original')}\n\n${mermaidFence('graph TD\nA-->B')}`; const ja = `${textFence('changed')}\n\n${mermaidFence('graph TD\nA-->B')}`; expect(await diagramParity(kind, en, ja)).toEqual([{ locale: 'ja', page: kind === 'guide' ? 'guide' : 'spec/overview', rule, expected: 'original', actual: 'changed' }]); });
-  it('detects an order swap across an interleaved Mermaid fence', async () => { const en = `${textFence('first')}\n\n${mermaidFence('graph TD\nA-->B')}\n\n${textFence('third')}`; const ja = `${textFence('third')}\n\n${mermaidFence('graph TD\nA-->B')}\n\n${textFence('first')}`; expect(await diagramParity(kind, en, ja)).toEqual([{ locale: 'ja', page: kind === 'guide' ? 'guide' : 'spec/overview', rule, expected: 'first\nthird', actual: 'third\nfirst' }]); });
-});
-
 describe('checkParity', () => {
   it.each([['md', '{#t1}'], ['mdx', '\\{#t1}']] as const)('accepts a blank-line-separated Steps heading in three .%s locales', async (ext, anchor) => {
     const content = page(`<Steps>\n\n1. ## T ${anchor}\n\n</Steps>`);

@@ -88,7 +88,7 @@ Heal configuration:
 詳細は次のページにある。
 
 - [設定](/ambercast/ja/reference/configuration/#file-selection)
-- [探索パターン](/ambercast/ja/reference/discovery-patterns/#selection)
+- [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#selection)
 - [ambercast init](/ambercast/ja/reference/cli/init/#flags)
 - [ambercast generate](/ambercast/ja/reference/cli/generate/#flags)
 - [ambercast run](/ambercast/ja/reference/cli/run/#flags)

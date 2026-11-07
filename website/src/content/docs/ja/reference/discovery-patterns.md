@@ -55,4 +55,4 @@ ambercast は、`testDir` からの相対パスに `testMatch` と `testIgnore` 
 
 - [設定](/ambercast/ja/reference/configuration/#key-table)
 - [ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)
-- [実行するテストの選択](/ambercast/ja/how-to/select-tests/)
+- [実行するテストを選ぶ](/ambercast/ja/how-to/select-tests/)

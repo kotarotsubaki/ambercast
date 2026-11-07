@@ -40,7 +40,7 @@ description: ambercast 全体で使う用語の規範的な定義と、翻訳で
 | consent | 同意とは、`generate` が `secrets.allow` の外にあるシークレット名を含む候補を永続化する前に必要な、対話式の判断である。 | `ambercast generate`; [シークレットの管理](/ambercast/ja/how-to/manage-secrets/) | 実行時のシークレット値解決 |
 | allowlist | 許可リストとは、生成が候補を永続化する前に `secrets.allow` が受け入れる、レビュー済みの論理シークレット名の集合である。 | 設定 / `ambercast generate`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | シークレットシンクのオリジン |
 | `secrets.allow` | `secrets.allow` は、事前承認済みの論理シークレット名を並べる設定の配列である。高リスクな `"*"` を指定すると、AI が提案したすべての名前を名前ごとのレビューなしで受け入れる。 | `RawConfig`; [設定](/ambercast/ja/reference/configuration/#secret-consent) | `AMBERCAST_SECRET_*` の値 |
-| `SecretNameChoice` | `SecretNameChoice` は、投影された `allowedName` と新しい `nameHint` のどちらかを選ぶ、プロバイダー向けの厳格な選択である。コミット済みの `SecretRef` が存在する前に、どちらもローカルで解決する。 | `SecretNameChoice`; [値の型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
+| `SecretNameChoice` | `SecretNameChoice` は、投影された `allowedName` と新しい `nameHint` のどちらかを選ぶ、プロバイダー向けの厳格な選択である。コミット済みの `SecretRef` が存在する前に、どちらもローカルで解決する。 | `SecretNameChoice`; [値型](/ambercast/ja/spec/value-types/#shared-types) | コミット済みの `SecretRef` |
 
 `stale` はcheckの結果に属するステータスであり、runの結果ステータスではない。healの冪等ターゲットの検査をスキップするのはリストモードのときである。
 

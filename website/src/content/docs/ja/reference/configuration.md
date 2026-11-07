@@ -91,7 +91,7 @@ ambercast は、次の順でファイルを選ぶ。
 
 ## 関連項目 {#see-also}
 
-- [CLI の概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix)
+- [CLIの概要](/ambercast/ja/reference/cli/overview/#command-flag-matrix)
 - [ディスカバリーパターン](/ambercast/ja/reference/discovery-patterns/#pattern-language)
 - [環境変数](/ambercast/ja/reference/environment-variables/#configuration)
 - [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)

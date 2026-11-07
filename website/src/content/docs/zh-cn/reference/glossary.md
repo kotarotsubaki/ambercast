@@ -11,7 +11,7 @@ description: ambercast 全站术语的规范性定义，以及翻译时必须保
 
 | 术语 | 规范性定义 | 所属 Schema / 命令 | 避免混淆的概念 |
 | --- | --- | --- | --- |
-| plan | 执行计划 (plan) 是一份符合 Schema 校验的 `PlanDocument`，其 `inputsDigest` 记录规范化 Prompt 的来源凭证，正文记录命名目标与可执行步骤。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | prompt 或 grounding |
+| plan | 执行计划 (plan) 是一份符合 Schema 校验的 `PlanDocument`，其 `inputsDigest` 记录规范化 Prompt 的来源凭证，正文记录命名目标与可执行步骤。 | `PlanDocument`；[执行计划文档](/ambercast/zh-cn/spec/plan-document/) | prompt 或 grounding |
 | grounding | 定位缓存 (grounding) 是针对每份执行计划独立的、符合 Schema 校验的缓存，其 `planDigest` 把以步骤为键的条目绑定到一份执行计划。 | `GroundingDocument`；[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/) | 执行计划或运行报告 |
 | artifact | 产物 (artifact) 是针对代码库内 `.test.md` Prompt 派生出的执行计划或定位缓存伴生文件。 | 布局解析器；[文件布局](/ambercast/zh-cn/reference/file-layout/#companions) | 运行凭据 |
 | fingerprint | 指纹 (fingerprint) 是一种元素定位值，包含字面量算法 `a11y-neighborhood-v2` 与一个 SHA-256 哈希值。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | `planDigest` |
@@ -88,7 +88,7 @@ description: ambercast 全站术语的规范性定义，以及翻译时必须保
 | `GroundingDocument` | `GroundingDocument` 是拥有定位缓存 `schemaVersion`、`planDigest` 与条目的严格 Schema。 | `GroundingDocument`；[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/) | `PlanDocument` |
 | `INTERRUPTED` | `INTERRUPTED` 是针对执行中断的结构化环境错误代码。 | 报告 Schema；[错误代码](/ambercast/zh-cn/reference/error-codes/#code-vocabulary) | 断言失败 |
 | `JSON-RPC` | `JSON-RPC` 承载已实现的 MCP 服务器的 stdio 消息。 | [ambercast mcp](/ambercast/zh-cn/reference/cli/mcp/#usage) | CLI `--json` |
-| `PlanDocument` | `PlanDocument` 是拥有执行计划版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
+| `PlanDocument` | `PlanDocument` 是拥有执行计划版本、来源凭证、目标与步骤的严格 Schema。 | `PlanDocument`；[执行计划文档](/ambercast/zh-cn/spec/plan-document/) | `GroundingDocument` |
 | `SECRET_REF_PATTERN` | `SECRET_REF_PATTERN` 是由 `SECRET_REF_SOURCE` 构建的锚定全值正则表达式。 | `SecretRef`；[提示词文件格式](/ambercast/zh-cn/reference/prompt-format/#secret-references) | 未锚定的片段 |
 | `a11y-neighborhood-v2` | `a11y-neighborhood-v2` 是唯一被接受的元素指纹算法字面量。 | `Fingerprint`；[元素指纹](/ambercast/zh-cn/spec/fingerprint/) | 执行计划 Schema 版本 2 |
 | `ambercast` | `ambercast` 是软件包二进制文件名称和 CLI 程序。 | package / CLI 概览 | 某个产物 Schema |

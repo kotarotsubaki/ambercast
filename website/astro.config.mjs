@@ -4,7 +4,6 @@ import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-s
 import mdx from '@astrojs/mdx';
 import { defineConfig } from 'astro/config';
 import remarkHeadingId from './scripts/lib/remark-heading-id.mjs';
-import { remarkDiagrams } from './scripts/lib/remark-diagrams.mjs';
 import { sidebar } from './src/sidebar.mjs';
 import { siteDescriptions } from './src/data/site-descriptions.mjs';
 
@@ -58,7 +57,7 @@ export default defineConfig({
     // The local plugin preserves explicit heading anchors while avoiding the upstream
     // remark-custom-heading-id package; entering this pipeline at all still requires
     // @astrojs/markdown-remark as a dependency, independent of which plugin runs here.
-    remarkPlugins: [remarkHeadingId, () => remarkDiagrams({ base })],
+    remarkPlugins: [remarkHeadingId],
   },
   integrations: [
     starlight({

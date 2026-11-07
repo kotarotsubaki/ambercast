@@ -19,7 +19,7 @@ description: 在 CI 中，ambercast 的检查没有副作用，默认只写运�
 
 写入失败时，`run` 返回带有 `reportPersistence: "failed"` 的信封。此时只有原本退出码为 0 的运行会变成 3，退出码 1、2、4、5 通常保持不变。`not-attempted` 表示没有尝试写入，`failed` 表示没有留下可见的部分内容。
 
-在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置参考](/ambercast/zh-cn/reference/configuration/#grounding)。
+在 CI 中回写定位缓存，需要 `--update-cache` 或 `ci.updateGroundingCache: true`。详情见[配置](/ambercast/zh-cn/reference/configuration/#grounding)。
 
 相关链接：[报告](/ambercast/zh-cn/reference/reports/#persistence)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)
 

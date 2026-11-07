@@ -38,4 +38,4 @@ sidebar:
 | 未规定 | 审查提供商与详细的结果约定 | 设计只说明由独立上下文中的 AI 判断意图和验证是否充分。 |
 | 明确未决 | `review` 没有此类事项 | 只有 `baseline` 和 `restore` 带有这个标签。 |
 
-当前可用的工具见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)，审查要读取的执行计划格式见[计划文档](/ambercast/zh-cn/spec/plan-document/)。
+当前可用的工具见 [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/#tool-table)，审查要读取的执行计划格式见[执行计划文档](/ambercast/zh-cn/spec/plan-document/)。

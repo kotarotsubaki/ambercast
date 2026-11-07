@@ -32,4 +32,4 @@ CI やスクリプトは、終了コードを見て実行結果を判別でき�
 
 - [エラーコード](/ambercast/ja/reference/error-codes/#code-vocabulary)
 - [レポート](/ambercast/ja/reference/reports/#envelope)
-- [よくある失敗のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)
+- [一般的な障害のトラブルシューティング](/ambercast/ja/how-to/troubleshoot/)

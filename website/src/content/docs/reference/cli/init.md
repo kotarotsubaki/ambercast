@@ -39,7 +39,7 @@ The `.gitignore` unit is the comment `# ambercast run evidence` followed by the 
 
 init always prints the complete change plan to stderr. In an interactive terminal it then asks `Write these files? [y/N] `, and `--yes` skips that prompt.
 
-In CI or another non-TTY environment, init rejects the invocation unless you pass `--yes`. When a coding agent runs the command, `--yes` skips only the CLI prompt. It never replaces the human approval for the four file changes. See the [operating contract](/ambercast/agents/operating-contract/#command-contract).
+In CI or another non-TTY environment, init rejects the invocation unless you pass `--yes`. When a coding agent runs the command, `--yes` skips only the CLI prompt. It never replaces the human approval for the four file changes. See the [Operating contract](/ambercast/agents/operating-contract/#command-contract).
 
 ## Exit codes {#exit-codes}
 

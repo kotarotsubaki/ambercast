@@ -63,6 +63,6 @@ ambercast 不再接受这种语法。请删除所有这样的行，然后按[迁
 
 - [发现模式](/ambercast/zh-cn/reference/discovery-patterns/#selection)
 - [环境变量](/ambercast/zh-cn/reference/environment-variables/#secrets)
-- [编写有效的提示词](/ambercast/zh-cn/how-to/write-effective-prompts/)
+- [编写高效的 Prompt](/ambercast/zh-cn/how-to/write-effective-prompts/)
 - [管理机密](/ambercast/zh-cn/how-to/manage-secrets/)
 - [执行计划中的机密](/ambercast/zh-cn/spec/secrets/)

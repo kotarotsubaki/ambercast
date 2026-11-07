@@ -54,4 +54,4 @@ view requires --allow-headless when no interactive terminal is attached.
 
 `view` は、ネットワークポートを使う ambercast 唯一のコマンドである。MCP サーバーは stdio を使う。
 
-関連ページ: [CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)
+関連ページ: [CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)、[レポート](/ambercast/ja/reference/reports/#envelope)、[設定](/ambercast/ja/reference/configuration/#key-table)、[ambercast mcp](/ambercast/ja/reference/cli/mcp/#usage)

@@ -38,7 +38,7 @@ Read every errors[].code.
 - `check`は`fresh`、`stale`、`missing-plan`、`missing-grounding`、`stale-grounding`、`invalid-grounding`、`fresh-without-grounding`、`orphaned-plan`、`orphaned-grounding`、`invalid-artifact-name`、`listed`、`skipped`を使う。
 - `heal`の完了した行は`status: completed`で、`repairOutcome`が`healed`、`partially-healed`、`unresolved`、`no-changes-needed`のいずれかになる。`listed`と`skipped`の行は識別情報だけを持つ。
 
-関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画（plan）のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
+関連リンク: [generateの結果](/ambercast/ja/reference/reports/#generate-results)、[runの結果](/ambercast/ja/reference/reports/#run-results)、[checkの結果](/ambercast/ja/reference/reports/#check-results)、[healの結果](/ambercast/ja/reference/reports/#heal-results)、[計画のライフサイクルと鮮度](/ambercast/ja/explanation/plan-lifecycle/#grounding-binding)
 
 ## 終了コードはバッチ全体の合図 {#exit-code-signal}
 

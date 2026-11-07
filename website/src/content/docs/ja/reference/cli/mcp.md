@@ -65,4 +65,4 @@ Claude Desktop は、設定に同じサーバーのエントリを書けば使�
 | CLI の入力フラグは未規定 | ツールの入力に `headed`・`list`・`stale`・`json`・`yes`・`configPath` は含まない |
 | 終了コードはレポートから推測する | `_meta.exitCode` が明示的に運ぶ |
 
-関連ページ: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)
+関連ページ: [MCP ツール](/ambercast/ja/reference/mcp-tools/#tool-table)、[MCP サーバー](/ambercast/ja/agents/mcp-server/#connection-boundary)、[CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)

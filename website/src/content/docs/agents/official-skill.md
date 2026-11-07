@@ -13,7 +13,7 @@ The [README](https://github.com/kotarotsubaki/ambercast#official-skill) covers t
 
 ## Intended role {#intended-role}
 
-The skill teaches the loop. The [setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary for one requested test. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
+The skill teaches the loop. For one requested test, the [Setup prompt](/ambercast/agents/setup-prompt/) sets the review-first boundary. The [MCP server](/ambercast/agents/mcp-server/) is the connection for clients that call tools instead of a shell.
 
 ambercast treats coding agents as first-class users next to the prompt and viewer surfaces for people.
 

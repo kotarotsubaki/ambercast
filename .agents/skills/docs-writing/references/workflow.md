@@ -36,15 +36,14 @@ Typo, punctuation, broken-link, and formatting fixes with unchanged meaning and 
 
 ## Generated pages
 
-English spec pages under `website/src/content/docs/spec/` are generated at build time from `docs/spec/*.md` and are gitignored: edit `docs/spec`. Japanese and Simplified Chinese spec pages are committed and edited directly. Never hand-edit generated output. Generate diagram SVGs with `npm run diagrams` from `website/`.
-
+English spec pages under `website/src/content/docs/spec/` are generated at build time from `docs/spec/*.md` and are gitignored: edit `docs/spec`. Japanese and Simplified Chinese spec pages are committed and edited directly. Never hand-edit generated output.
 ## Check commands and exit codes
 
 Run these commands from `website/`. Prose checker warnings never fail. For direct `node scripts/check-prose.mjs` invocations, exit 2 means a usage, configuration, I/O, tool, or preview-residue failure, including invalid or unknown page slugs, an unresolved base, or spec-generation failure where applicable; it leaves stdout empty and prints one diagnostic to stderr. npm wrappers print their own script banners, so the empty-stdout guarantee does not apply to them. For `npm run check`, a non-zero exit comes from whichever chained check failed; each check has its own exit codes.
 
 | Command | Selection and output | Exit 0 | Exit 1 | Exit 2 |
 | --- | --- | --- | --- | --- |
-| `npm run check` | Chains parity, reference, claims, prose for `prose-lint.json` pages only, and diagram presence/orphan/alt checks; no SVG content comparison | All chained checks pass | Determined by the failed check's own exit codes | Determined by the failed check's own exit codes |
+| `npm run check` | Chains parity, reference, claims, prose for `prose-lint.json` pages only, and the rejection of `mermaid` code fences | All chained checks pass | Determined by the failed check's own exit codes | Determined by the failed check's own exit codes |
 | `npm run check:changed [-- --base <ref>]` | Defaults to `origin/main`; compares against the merge base, including committed, staged, unstaged, and untracked changes; emits only new findings | No new errors, including no changed docs | New errors relative to base | Cannot complete as described above |
 | `node scripts/check-prose.mjs --page <slug>` | Repeatable; locale-independent slug without extension; checks named pages in all locales and emits JSONL | No errors | Any error on named pages | Cannot complete as described above |
 | `node scripts/check-prose.mjs --report` | Aggregate Markdown table for every page | Always for completed reports, regardless of findings | Never | Cannot complete as described above |

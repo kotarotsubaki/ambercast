@@ -9,7 +9,7 @@ Replay reuses what ambercast recorded. Where the record is missing or unusable, 
 
 `run` consumes grounding for `ai` steps and for element-binding steps: click, press, fill, fill-secret, and capture. Navigation and every assertion check the live page directly, without a grounding lookup.
 
-An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
+An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [Grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
 The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
 

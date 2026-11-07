@@ -9,7 +9,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 `run` 为 `ai` 步骤和绑定元素的步骤读取定位缓存。绑定元素的步骤包括 click、press、fill、fill-secret 和 capture。导航和所有断言直接检查实时页面，不查询定位缓存。
 
-元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见 [Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)。
+元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
 解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
@@ -20,7 +20,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 - 可恢复的未命中且带 `--resolve`：实时解析。
 - 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
 
-相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
+相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
 ## 定位缓存命中时 {#grounding-hit}
 

@@ -17,7 +17,7 @@ sidebar:
 
 ## ステータス {#status}
 
-`ambercast baseline` と `ambercast restore` は、現行版では実装されておらず、利用できる CLI コマンドでもない。2 つは効果が逆なので、別々の単純な動詞にしている。`reset` に統合するコマンドや、モードを切り替えるフラグは、誤用しやすいとして退けた。利用できるコマンドは[CLI の概要](/ambercast/ja/reference/cli/overview/#command-surface)に、現在ある設定キーは[設定](/ambercast/ja/reference/configuration/#key-table)にある。
+`ambercast baseline` と `ambercast restore` は、現行版では実装されておらず、利用できる CLI コマンドでもない。2 つは効果が逆なので、別々の単純な動詞にしている。`reset` に統合するコマンドや、モードを切り替えるフラグは、誤用しやすいとして退けた。利用できるコマンドは[CLIの概要](/ambercast/ja/reference/cli/overview/#command-surface)に、現在ある設定キーは[設定](/ambercast/ja/reference/configuration/#key-table)にある。
 
 ## 計画中の境界 {#planned-boundary}
 

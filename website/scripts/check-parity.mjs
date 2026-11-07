@@ -2,7 +2,6 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join, relative, resolve } from 'node:path';
 import { splitByCodeRegions } from './lib/wikilinks.mjs';
-import { matchMermaidFenceOpen } from './lib/mermaid-fences.mjs';
 
 /**
  * Verifies that localized documentation remains structurally equivalent to the root locale.
@@ -314,7 +313,7 @@ function anchors(markdown) {
 
 function fences(markdown) {
   return splitByCodeRegions(markdown)
-    .filter((region) => region.isCode && /^( {0,3})(`{3,}|~{3,})/.test(region.text) && !matchMermaidFenceOpen(region.text.split('\n')[0]))
+    .filter((region) => region.isCode && /^( {0,3})(`{3,}|~{3,})/.test(region.text))
     .map((region) => region.text.split('\n').slice(1, -1).join('\n'));
 }
 

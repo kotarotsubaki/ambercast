@@ -37,7 +37,7 @@ description: 说明执行计划何时仍可回放，以及 `check` 如何在不�
 
 这样可以避免把已损坏的执行计划报告为 `fresh`。
 
-相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复已过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
+相关链接：[ambercast check](/ambercast/zh-cn/reference/cli/check/#results)、[恢复过期的产物](/ambercast/zh-cn/how-to/recover-stale-artifacts/#stale)
 
 ## 定位缓存如何绑定执行计划 {#grounding-binding}
 
@@ -49,7 +49,7 @@ description: 说明执行计划何时仍可回放，以及 `check` 如何在不�
 
 `check` 还会反向扫描。没有对应测试的产物会报告为 `orphaned-plan` 或 `orphaned-grounding`；无法反查到测试的名称会报告为 `invalid-artifact-name`。
 
-相关链接：[Grounding 文档](/ambercast/zh-cn/spec/grounding-document/#plan-digest)、[报告](/ambercast/zh-cn/reference/reports/#check-results)
+相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/#plan-digest)、[报告](/ambercast/zh-cn/reference/reports/#check-results)
 
 ## 新鲜度判定移交什么 {#freshness-handoff}
 

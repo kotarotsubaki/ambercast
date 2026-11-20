@@ -61,14 +61,15 @@ The CLI `--strict` flag and the MCP `strict` argument have been removed. Remove 
 
 1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
 2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.
-   - If generate warns `action-unconfirmed` for an input, do not go on to step 3.
-   - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
-   - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
+   - The `action-unconfirmed` warning concerns assert quality and does not determine whether replay is possible.
+   - To improve verification, add an assert that shows the input's effect, such as the signed-in user name, and repeat step 2.
 3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
 4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report.
    - Always commit the plan.
    - Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`.
    - When it is `uncommitted`, keep the grounding local.
+
+Earlier versions saved bindings only for actions listed in `confirms`. Now a passing `run --resolve` saves bindings for all actions at completion when write-back is allowed. You can keep asserts added to address warnings in earlier versions; they improve verification quality.
 
 ## Verification \{#verification}
 

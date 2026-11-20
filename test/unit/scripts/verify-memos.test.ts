@@ -12,7 +12,7 @@ import { main, parseArgs, CASES } from '../../../scripts/verify-memos.mjs';
 import { REPORT_SCHEMA_VERSION, ReportEnvelope } from '#report/schema.js';
 import { PLAN_SCHEMA_VERSION, PlanDocument } from '#core/ir/schema.js';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
-import { runProcess, createDockerRunner, TerminationUnconfirmedError, unconfirmedSteps } from '../../../scripts/lib/memos-harness.mjs';
+import { runProcess, createDockerRunner, TerminationUnconfirmedError } from '../../../scripts/lib/memos-harness.mjs';
 
 vi.mock('node:child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:child_process')>();
@@ -245,41 +245,33 @@ async function run(f: Fake, argv: string[] = [], platform = 'linux') { return ma
 function last(f: Fake) { return f.out().trimEnd().split('\n').at(-1)!; }
 
 describe('confirms regeneration gates', () => {
-  it('the read-only fake has complete confirms coverage', () => {
-    expect(unconfirmedSteps(readOnlyPlan())).toEqual([]);
-  });
-  it.each([false, true])('TEST-CNF-6 stops before password creation and resolve with all uncovered cases (long=%s)', async long => {
-    const missing = long ? Array.from({ length: 40 }, (_, i) => `uncovered-step-${i}`) : ['click-first', 'capture-last'];
-    const indices = [0, caseTable.findIndex(c => c.target !== caseTable[0]!.target)];
-    expect(new Set(indices.map(i => caseTable[i]!.target)).size).toBe(2);
+  it.each([true, false])('TEST-HARNESS-1 reaches resolve after whole-set generation and requires confirmed bindings (%s)', async confirmed => {
     const f: Fake = createFakeDeps({ runProcess: async call => {
       const success = await f.successfulProcess(call);
-      if (call.kind === 'generate') for (const i of indices) {
-        if (!call.argv.includes(prompts[i]!)) continue;
-        write(join(call.opts.cwd, plans[i]!), JSON.stringify({ steps: [
-          ...missing.map(id => ({ id, kind: 'capture' })),
+      if (call.kind === 'generate' && call.argv.includes(prompt)) {
+        write(join(call.opts.cwd, plan), JSON.stringify({ steps: [
+          { id: 'uncovered', kind: 'action', action: 'click', target: caseTable[0]!.target,
+            intent: { description: 'Open memo', roleHint: 'button', sourceSpan: fakeSourceSpan } },
         ] }));
+      }
+      if (call.kind === 'resolve') {
+        const envelope = JSON.parse(success.stdout);
+        // The confirmed case must reach replay, so rejecting every AI-proposed binding would fail this test.
+        envelope.results[0].steps = [{ id: 'uncovered', status: 'passed', binding: { provenance: 'ai-proposed', confirmed } }];
+        return result(0, JSON.stringify(envelope));
       }
       return success;
     } });
-    const before = snapshot(f.fixture);
-    expect(await run(f, ['--regenerate'])).toBe(1);
-    expect(f.calls('generate')).toHaveLength(targets.length);
-    const reason = `unconfirmed steps: ${indices.map(i => `${caseIds[i]}=${missing.join(',')}`).join('; ')}`;
-    if (long) expect(reason.length).toBeGreaterThan(400);
-    expect(last(f)).toBe(`verify-memos: FAIL stage=fixture reason=${reason.slice(0, 400)} aiCalls=n/a`);
-    expect(f.err().split('\n').filter(line => line === reason)).toHaveLength(1);
-    expect(f.err().match(/unconfirmed steps:/g)).toHaveLength(1);
-    expect(f.events.filter(event => event === 'password-generated')).toEqual([]);
-    expect(f.runnerCount('startContainer')).toBe(0);
-    expect(f.calls('resolve')).toEqual([]);
-    noPublication(f, before);
+    expect(await run(f, ['--regenerate'])).toBe(confirmed ? 0 : 1);
+    expect(f.calls('resolve')).toHaveLength(1);
+    expect(f.calls('replay')).toHaveLength(confirmed ? 1 : 0);
+    expect(f.err()).not.toContain('unconfirmed steps:');
+    if (!confirmed) expect(last(f)).toContain(`unconfirmed bindings after resolve: ${caseIds[0]}=uncovered`);
   });
-  it('TEST-CNF-6 checks consent retention before uncovered plans', async () => {
+  it('TEST-CNF-6 checks consent retention before resolve', async () => {
     const f: Fake = createFakeDeps({ runProcess: async call => {
       const success = await f.successfulProcess(call);
       if (call.kind === 'generate') {
-        if (call.argv.includes(prompt)) write(join(call.opts.cwd, plan), JSON.stringify({ steps: [{ id: 'uncovered', kind: 'capture' }] }));
         if (f.calls('generate').length === targets.length) {
           const path = join(call.opts.cwd, configFile), config = JSON.parse(fs.readFileSync(path, 'utf8'));
           config.secrets.allow = ['changed.name'];
@@ -295,23 +287,6 @@ describe('confirms regeneration gates', () => {
     expect(f.err()).not.toContain('unconfirmed steps:');
     expect(f.passwordGenerated()).toBe(false);
     expect(f.runnerCount('startContainer')).toBe(0);
-    expect(f.calls('resolve')).toEqual([]);
-    noPublication(f, before);
-  });
-  it.each(['missing', 'json', 'steps'])('TEST-CNF-7 rejects an uninspectable generated plan (%s)', async mode => {
-    const f: Fake = createFakeDeps({ runProcess: async call => {
-      const success = await f.successfulProcess(call);
-      if (call.kind === 'generate' && call.argv.includes(prompt)) {
-        const path = join(call.opts.cwd, plan);
-        if (mode === 'missing') fs.rmSync(path);
-        else write(path, mode === 'json' ? '{' : '{}');
-      }
-      return success;
-    } });
-    const before = snapshot(f.fixture);
-    expect(await run(f, ['--regenerate'])).toBe(1);
-    expect(last(f)).toMatch(new RegExp(`^verify-memos: FAIL stage=fixture reason=cannot inspect plan ${caseIds[0]}: .+ aiCalls=n/a$`));
-    if (mode === 'steps') expect(last(f)).toContain('plan has no steps');
     expect(f.calls('resolve')).toEqual([]);
     noPublication(f, before);
   });
@@ -1090,21 +1065,36 @@ describe('main one-case regeneration', () => {
       expect(last(f)).toContain(`known failure ${tagId} (#632) has a fixture`);
     });
   });
-  it('TEST-ONE-6 generates only the target once and inspects only its plan for coverage', async () => {
+  it('TEST-ONE-6 generates only the target once', async () => {
     const f = oneFake();
     write(join(f.fixture, plans[0]!), JSON.stringify({ steps: [{ id: 'uncovered', kind: 'capture' }] }));
     expect(await run(f, oneArgv)).toBe(0);
     expect(f.calls('generate')).toHaveLength(1);
     expectCommand(f.calls('generate')[0]!, ['generate', '--target', oneTarget, prompts[oneIdx]!], 900_000);
   });
-  it('TEST-ONE-6 fails on an uncovered target plan, naming only the target', async () => {
-    const f = oneFake((call, out) => {
-      if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ steps: [{ id: 'loose', kind: 'capture' }] }));
+  it.each([true, false])('TEST-HARNESS-1 reaches resolve after one-case generation and requires confirmed bindings (%s)', async confirmed => {
+    const f = oneFake((call, out, envelope) => {
+      if (call.kind === 'generate') {
+        const generated = navigationPlan(caseTable[oneIdx]!, true);
+        write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ ...generated, steps: [
+          ...generated.steps,
+          { id: 'loose', kind: 'action', action: 'click', target: oneTarget,
+            intent: { description: 'Open memo', roleHint: 'button', sourceSpan: fakeSourceSpan } },
+        ] }));
+      }
+      if (call.kind === 'resolve' && !confirmed && envelope) {
+        envelope.results.find(row => row.file === prompts[oneIdx])!.steps = [
+          { id: 'loose', status: 'passed', binding: { provenance: 'ai-proposed', confirmed: false } },
+        ];
+        return result(0, JSON.stringify(envelope));
+      }
       return out;
     });
-    expect(await run(f, oneArgv)).toBe(1); fail(f, 'fixture');
-    expect(last(f)).toContain(`unconfirmed steps: ${oneId}=loose`);
-    expect(f.starts).toEqual([]);
+    expect(await run(f, oneArgv)).toBe(confirmed ? 0 : 1);
+    expect(f.calls('resolve')).toHaveLength(1);
+    expect(f.calls('replay')).toHaveLength(confirmed ? 1 : 0);
+    expect(f.err()).not.toContain('unconfirmed steps:');
+    if (!confirmed) expect(last(f)).toContain(`unconfirmed bindings after resolve: ${oneId}=loose`);
   });
   it('TEST-ONE-7 resolves a carried-in plan without generating and publishes its bytes', async () => {
     const f = oneFake((call, out) => {
@@ -1376,13 +1366,17 @@ describe('main one-case regeneration', () => {
       expect(await run(f, oneArgv)).toBe(1);
       expect(fs.readFileSync(join(candidateDir(f), files(f)[0]!), 'utf8')).not.toContain(password);
     });
-    it('TEST-ONE-18 keeps the plan after a coverage failure', async () => {
-      const f = oneFake((call, out) => {
-        if (call.kind === 'generate') write(join(call.opts.cwd, plans[oneIdx]!), JSON.stringify({ steps: [{ id: 'loose', kind: 'capture' }] }));
-        return out;
-      });
+    it('TEST-ONE-18 keeps the generated plan after the resolve binding check fails', async () => {
+      const f = oneFake(withResolved(envelope => {
+        envelope.results.find(row => row.file === prompts[oneIdx])!.steps = [
+          { id: 'loose', status: 'passed', binding: { provenance: 'ai-proposed', confirmed: false } },
+        ];
+      }));
       expect(await run(f, oneArgv)).toBe(1);
+      fail(f, 'replay');
+      expect(last(f)).toContain('unconfirmed bindings after resolve:');
       expect(files(f)).toHaveLength(1); expect(f.err()).toContain('candidate plan:');
+      expect(fs.readFileSync(join(candidateDir(f), files(f)[0]!), 'utf8')).toBe(JSON.stringify(navigationPlan(caseTable[oneIdx]!, true)));
     });
     it('TEST-ONE-18 keeps nothing after a generate failure', async () => {
       const f = oneFake((call, out) => call.kind === 'generate' ? result(1, '', 'rejected') : out);

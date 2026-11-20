@@ -1245,14 +1245,15 @@ CLI の `--strict` と MCP の `strict` 引数は削除された。呼び出し�
 
 1. `npx ambercast check --json` を実行し、対象の計画が `stale` と報告されることを確かめる。
 2. `stale` の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。
-   - generate がある入力について `action-unconfirmed` の警告を出したら、手順 3 へ進まない。
-   - 通常の run はその入力で `GROUNDING_UNRESOLVED` になる。
-   - サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
+   - `action-unconfirmed` は assert の質に関する警告であり、再生の可否を決めるものではない。
+   - 確認の質を上げるには、サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
 3. 手元で `npx ambercast run --resolve --update-cache <file>` を実行する。再生成の直後はグラウンディングが空なので、逐語の引用がない要素ステップごとに ambercast が AI を 1 回呼ぶ。CI は既定でグラウンディングを保存しない。
 4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。
    - 計画は常にコミットする。
    - グラウンディングは、`grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットする。
    - `uncommitted` なら、グラウンディングは手元に置く。
+
+以前のバージョンは、`confirms` に挙がった操作の binding だけを保存していた。現在は、書き戻しが許可された passing な `run --resolve` が完走時に全操作の binding を保存する。以前の版で警告を受けて追加した assert は、確認の質を上げるため、そのまま残してよい。
 
 ## 確認 \{#verification}
 
@@ -1741,6 +1742,8 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
 ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
+
+ケースの全ステップが合格すると、残りの操作とキャプチャーのバインディングも `confirmed` が `true` になる。書き戻しが許可されない場合や失敗した場合も、この値は `true` のままである。グラウンディングファイルの更新を保証する値ではない。
 
 実行された run の結果と完了した heal の結果は、計画の各ターゲットについて `sessions` の項目を持つ。各値は `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }` で、`state` は `not-opened`、`closed`、`close-failed` のいずれかである。`not-opened` は、そのターゲットの起動がセッションを返さなかったことを示す。最初のステップの前に実行が止まった場合も、これに当たる。クローズに失敗しても、ケースのステータスは変わらない。
 
@@ -3697,7 +3700,12 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 既存のトレースの再生が成功した後、実装はそのエントリを変更せずに残さなければならない（MUST）。実装は、終端の成功基準を正確に被覆したエージェント実行が成功した後にだけ、AI エントリを書き込み、上書きしなければならない（MUST）。エージェント実行が成功しても、最後の観測がスナップショットか失敗したアサーションなら、コールドパスはエントリを書き込んではならない（MUST NOT）。成功したエージェント実行の最後の観測がスナップショットか失敗したアサーションなら、フォールバックパスは、原因の古いエントリを削除しなければならない（MUST）。エージェント実行が失敗するか中断した後、実装は既存のエントリを変更せずに残さなければならない（MUST）（`src/usecases/run.ts:2255-2266`、`src/usecases/run.ts:2565`）。
 
-要素エントリは、そのバインディングが `confirmed` に達したときにだけ、書き込む、または上書きしなければならない（MUST）。そのためには、少なくとも 1 つのステップがその要素ステップを自身の空でないコミット済み `confirms` リストに挙げ、該当するすべてのステップが同じケースで成功しなければならない。確認するアサーションが `element-visible` の場合、成功が有効な確認の根拠になるのは、一致した候補がちょうど 1 つのときだけである。複数の候補が一致した成功では、バインディングを確認しない。`acted` だけのバインディングは、書き戻しの時点で破棄し、永続化しない（`src/usecases/run.ts:149-180`、`src/usecases/run.ts:3472-3495`、`src/usecases/run.ts:4238-4247`）。
+要素エントリは、そのバインディングが `confirmed` に達したときにだけ、書き込みまたは上書きしなければならない（MUST）。次のいずれかの契機で `confirmed` になる。
+
+- 少なくとも 1 つのステップが、空でないコミット済み `confirms` リストに要素ステップを挙げる。該当する全ステップが、同じケースで有効な確認の根拠を持って合格する。`element-visible` の成功が有効な根拠になるのは、一致した候補がちょうど 1 つのときだけである。
+- ケースの全ステップが合格する。残りの click・press・fill・fill-secret・capture のバインディングもすべて確認済みになる。`confirms` に挙がらない操作や、`element-visible` の一致が複数ある操作も含まれる。
+
+ケースが途中で失敗・中断した場合、`acted` だけのバインディングを永続化してはならない（MUST NOT）。ファイルへの保存には、引き続きライトバックのゲートの許可が必要である（`src/usecases/run.ts:3559-3582`、`src/usecases/run.ts:3490-3524`、`src/usecases/run.ts:4431-4437`、`src/usecases/run.ts:4526-4536`）。
 
 すべての `TraceFillSecret` について、`secretRef` は、それを含む計画の AI ステップのコミット済み `secrets[].ref` の集合に属さなければならない（MUST）。違反は整合性の失敗であり、エージェント実行へフォールバックしてはならない（MUST NOT）（`src/usecases/run.ts:1158`、`src/usecases/run.ts:1356`）。
 
@@ -4042,6 +4050,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
 | report 3.10 → 3.11 は `generator-assumption` の警告を追加する。Stage 3 で採用した仮定は `healed` 行だけの任意の `warnings` に載る。仮定では generate や heal を止めない。単一ターゲットの応答の曖昧さは再試行可能な `AI_RESPONSE_INVALID` と終了コード 3 になる。複数ターゲットの未確定は `PROMPT_AMBIGUOUS` と終了コード 2 のままである。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 閉じた union を検証する利用者は 3.11 のスキーマを使わなければならない（MUST）。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |
 | CLI の `--strict` と MCP の generate 入力 `strict` を削除する。 | `repo:src/core/cli/manifest.ts`, `repo:src/adapters/mcp/tool-schemas.ts` | 呼び出しから両者を取り除く。`generate --strict` は未知のオプションとして終了コード 2 になり、MCP は `strict` を拒否する。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |
@@ -4181,7 +4190,13 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 
 `--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画（plan）では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
-`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、バインディングを確かめる全ステップが合格し、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
+`--resolve` を付けると、要素のミスはその場で解決する。ケースの途中で確認済みにするには、少なくとも 1 つのステップが操作を `confirms` に挙げる必要がある。該当する全ステップが有効な根拠で合格すると、ambercast はエントリを保存対象にする。
+
+ケースの全ステップが合格すると、残りの操作と capture のエントリも保存対象になる。操作には click・press・fill・fill-secret が含まれる。`confirms` に挙がらない操作や、`element-visible` の一致が複数ある操作も含まれる。
+
+ケースが途中で失敗・中断した場合、要素のエントリは `confirms` で確認済みになったものだけが保存対象である。ファイルへの保存には、ライトバックのゲートの許可が必要だ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
+
+ケースが合格してグラウンディングの保存も成功すると、同じ計画と画面の状態から AI なしで再生できる。ただし、`ai` ステップのエントリは、検証の記録を残して合格したときだけ作る。記録を残さずに合格した `ai` ステップは、引き続き再生時に `--resolve` が必要である。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)、[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 

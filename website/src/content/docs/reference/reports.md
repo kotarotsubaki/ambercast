@@ -116,6 +116,8 @@ Step and review results share these branches.
 
 After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
 
+When every case step passes, `confirmed` is also `true` for the remaining action and capture bindings. This value remains `true` even if write-back is disallowed or fails. It does not guarantee that the grounding file was updated.
+
 Every executed run result and every completed heal result has a `sessions` entry for each target in the plan. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means the target's launch returned no session, including when execution stopped before its first step. A failed close leaves the case status unchanged.
 
 ## Review concerns {#review-concerns}

@@ -7,6 +7,7 @@ description: "アーティファクトのバージョン受け入れは、リリ
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
 | report 3.10 → 3.11 は `generator-assumption` の警告を追加する。Stage 3 で採用した仮定は `healed` 行だけの任意の `warnings` に載る。仮定では generate や heal を止めない。単一ターゲットの応答の曖昧さは再試行可能な `AI_RESPONSE_INVALID` と終了コード 3 になる。複数ターゲットの未確定は `PROMPT_AMBIGUOUS` と終了コード 2 のままである。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 閉じた union を検証する利用者は 3.11 のスキーマを使わなければならない（MUST）。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |
 | CLI の `--strict` と MCP の generate 入力 `strict` を削除する。 | `repo:src/core/cli/manifest.ts`, `repo:src/adapters/mcp/tool-schemas.ts` | 呼び出しから両者を取り除く。`generate --strict` は未知のオプションとして終了コード 2 になり、MCP は `strict` を拒否する。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |

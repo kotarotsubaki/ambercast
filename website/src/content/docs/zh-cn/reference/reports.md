@@ -116,6 +116,8 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
 
+用例的所有步骤都通过后，剩余操作和捕获步骤的绑定也会将 `confirmed` 设为 `true`。即使回写未获允许或写入失败，该值仍为 `true`，因此它不保证定位缓存文件已更新。
+
 每个已执行的 run 结果和每个已完成的 heal 结果，都为执行计划中的每个目标提供一个 `sessions` 条目。每个值为 `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`，其中 `state` 为 `not-opened`、`closed` 或 `close-failed`。`not-opened` 表示该目标的启动没有返回会话，包括执行在其第一个步骤之前就停止的情况。关闭失败不会改变用例状态。
 
 ## 评审关注点 {#review-concerns}

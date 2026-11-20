@@ -2933,12 +2933,16 @@ describe('run', () => {
       expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
     });
 
-    it('TEST-R7 does not confirm from a passing element-visible assert matching two elements', async () => {
+    it('TEST-R7 saves on completion without confirms promotion from an element-visible assert matching two elements', async () => {
       const f = await fixture({ names: ['Submit', 'Submit'] });
       vi.spyOn(f.session, 'accessibilitySnapshot').mockResolvedValueOnce(capture(['Submit'])).mockResolvedValue(capture(['Submit', 'Submit']));
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
       expect(outcome.results[0]?.result.steps[1]).toMatchObject({ status: 'passed' });
-      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toBeUndefined();
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      // Two matches cannot confirm the action, but SPEC-SAVE-1 saves it on completion.
+      const entry = (await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit'];
+      expect(entry).toBeDefined();
+      expect(entry).toMatchObject({ kind: 'element' });
     });
 
     it('TEST-R7 requires both confirming steps when the second is skipped', async () => {
@@ -3049,12 +3053,26 @@ describe('run', () => {
       expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
     });
 
-    it('TEST-R8 preserves the old entry byte-identically after verify miss and unconfirmed first binding', async () => {
+    it('TEST-R8 preserves the old entry byte-identically after verify miss when the case does not complete', async () => {
+      const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint), {
+        assertOutcome: { passed: false, message: 'Never shown' },
+      });
+      const f = await fixture({ session, steps: [click, laterFailure], entries: { 'click-submit': { ...hitEntry, fingerprint: FINGERPRINT } } });
+      const outcome = await run(f.deps, DEFAULT_OPTIONS);
+      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed' });
+      expect(outcome.results[0]?.result.status).toBe('failed');
+      // SPEC-SAVE-5 preserves the old entry when the replacement is never confirmed.
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+    });
+
+    it('TEST-R8 replaces the old entry after verify miss when the case completes', async () => {
       const session = createFakeBrowserSession(liveEntries([SUBMIT], submitFingerprint));
       const f = await fixture({ session, steps: [click], entries: { 'click-submit': { ...hitEntry, fingerprint: FINGERPRINT } } });
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
-      expect(outcome.results[0]?.result.steps[0]).toMatchObject({ status: 'passed' });
-      expect(await f.recordingStorage.storage.readText(f.groundingPath)).toBe(f.before);
+      expect(outcome.results[0]?.result.status).toBe('passed');
+      // SPEC-SAVE-1 saves the fresh binding on completion even without a confirmer.
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toEqual(hitEntry);
+      expect(await f.recordingStorage.storage.readText(f.groundingPath)).not.toBe(f.before);
     });
   });
 

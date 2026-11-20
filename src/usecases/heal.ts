@@ -788,9 +788,13 @@ type GroundingRepairOutcome =
  * Every required step must have a passing result in the NEW measurement's
  * replay, never the baseline replay. Re-read `groundingFile` through
  * `overlay.storage` after `measureReplay` returns and require every named entry
- * to be present. SPEC-R5 writes entries only for bindings that reached
- * `confirmed` at case end (`acted` bindings are discarded), and the caller
- * deleted these entries before replay, so presence proves new confirmation.
+ * to be present. The caller deleted these entries before replay, so presence
+ * establishes that this replay saved them. Either valid confirms steps or
+ * successful case completion can promote a binding. Presence alone proves
+ * neither a valid confirming basis nor completion of the whole case: an
+ * earlier confirms promotion can survive a later failure, and completion
+ * can save a binding even when an element-visible confirmer has multiple
+ * matches. Adoption retains the passing-step and entry-presence checks above.
  */
 async function verifyGroundingRepairAdoption(
   overlay: HealOverlayStorage,

@@ -61,14 +61,15 @@ CLI の `--strict` と MCP の `strict` 引数は削除された。呼び出し�
 
 1. `npx ambercast check --json` を実行し、対象の計画が `stale` と報告されることを確かめる。
 2. `stale` の計画ごとに `npx ambercast generate <file>` を実行する。差分を見て、入力の効果を示す assert の `confirms` にその入力が入ったことを確かめる。
-   - generate がある入力について `action-unconfirmed` の警告を出したら、手順 3 へ進まない。
-   - 通常の run はその入力で `GROUNDING_UNRESOLVED` になる。
-   - サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
+   - `action-unconfirmed` は assert の質に関する警告であり、再生の可否を決めるものではない。
+   - 確認の質を上げるには、サインイン後のユーザー名のように、その入力の効果を示す assert を足し、手順 2 をやり直す。
 3. 手元で `npx ambercast run --resolve --update-cache <file>` を実行する。再生成の直後はグラウンディングが空なので、逐語の引用がない要素ステップごとに ambercast が AI を 1 回呼ぶ。CI は既定でグラウンディングを保存しない。
 4. `npx ambercast check` で計画が `fresh` であることを確かめる。続けて `npx ambercast run <file>` を実行し、pass することと、レポートの `aiCalls` が 0 であることを確かめる。
    - 計画は常にコミットする。
    - グラウンディングは、`grounding.repositoryPolicy` が `committed` のときだけ計画と一緒にコミットする。
    - `uncommitted` なら、グラウンディングは手元に置く。
+
+以前のバージョンは、`confirms` に挙がった操作の binding だけを保存していた。現在は、書き戻しが許可された passing な `run --resolve` が完走時に全操作の binding を保存する。以前の版で警告を受けて追加した assert は、確認の質を上げるため、そのまま残してよい。
 
 ## 確認 \{#verification}
 

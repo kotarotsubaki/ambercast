@@ -116,6 +116,8 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 
 ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
 
+ケースの全ステップが合格すると、残りの操作とキャプチャーのバインディングも `confirmed` が `true` になる。書き戻しが許可されない場合や失敗した場合も、この値は `true` のままである。グラウンディングファイルの更新を保証する値ではない。
+
 実行された run の結果と完了した heal の結果は、計画の各ターゲットについて `sessions` の項目を持つ。各値は `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }` で、`state` は `not-opened`、`closed`、`close-failed` のいずれかである。`not-opened` は、そのターゲットの起動がセッションを返さなかったことを示す。最初のステップの前に実行が止まった場合も、これに当たる。クローズに失敗しても、ケースのステータスは変わらない。
 
 ## レビューの指摘 {#review-concerns}

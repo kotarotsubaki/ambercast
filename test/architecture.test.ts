@@ -781,6 +781,16 @@ describe('architecture guardrails', () => {
         {
           "className": "IntegrityViolationError",
           "fileName": "usecases/run.ts",
+          "functionName": "buildElementEntry",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
+          "functionName": "planCompletionPromotions",
+        },
+        {
+          "className": "IntegrityViolationError",
+          "fileName": "usecases/run.ts",
           "functionName": "promoteConfirmedBindings",
         },
         {

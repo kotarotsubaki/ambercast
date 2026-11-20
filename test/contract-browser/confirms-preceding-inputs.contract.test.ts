@@ -12,11 +12,11 @@ import { startFixtureApp } from './support/fixture-app.js';
 
 const POSITIVE_BODY = 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the text "Signed in as verifier" is displayed.';
 const CASES = [
-  { name: 'P', body: POSITIVE_BODY, requests: 2, saved: ['fill-username', 'fill-password', 'click-sign-in'], missing: [] },
-  { name: 'OLD', body: POSITIVE_BODY, requests: 2, saved: ['click-sign-in'], missing: ['fill-username', 'fill-password'] },
-  { name: 'N1', body: 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Sign out" button is displayed.', requests: 2, saved: [], missing: ['fill-username', 'fill-password', 'click-sign-in'] },
-  { name: 'N2', body: 'Open the sign-in page. The browser autofills the username and password. Type "verifier" into the search box, then click "Sign in". Assert that the text "Signed in as verifier" is displayed.', requests: 1, saved: ['click-sign-in'], missing: ['fill-search'] },
-  { name: 'N3', body: 'Open the sign-in page. Enter the username "alice", then replace it with the username "verifier". Enter the saved password and click "Sign in". Assert that the text "Signed in as verifier" is displayed.', requests: 3, saved: ['fill-username', 'fill-password', 'click-sign-in'], missing: ['fill-username-first'] },
+  { name: 'P', body: POSITIVE_BODY, requests: 2, confirms: ['fill-username', 'fill-password', 'click-sign-in'], operations: ['fill-username', 'fill-password', 'click-sign-in'] },
+  { name: 'OLD', body: POSITIVE_BODY, requests: 2, confirms: ['click-sign-in'], operations: ['fill-username', 'fill-password', 'click-sign-in'] },
+  { name: 'N1', body: 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Sign out" button is displayed.', requests: 2, confirms: [], operations: ['fill-username', 'fill-password', 'click-sign-in'] },
+  { name: 'N2', body: 'Open the sign-in page. The browser autofills the username and password. Type "verifier" into the search box, then click "Sign in". Assert that the text "Signed in as verifier" is displayed.', requests: 1, confirms: ['click-sign-in'], operations: ['fill-search', 'click-sign-in'] },
+  { name: 'N3', body: 'Open the sign-in page. Enter the username "alice", then replace it with the username "verifier". Enter the saved password and click "Sign in". Assert that the text "Signed in as verifier" is displayed.', requests: 3, confirms: ['fill-username', 'fill-password', 'click-sign-in'], operations: ['fill-username-first', 'fill-username', 'fill-password', 'click-sign-in'] },
 ] as const;
 
 // Quotes must refer to the instruction rather than the identically named heading.
@@ -36,7 +36,8 @@ describe('Issue #598 TEST-10 preceding input confirmation against real Chromium'
     if (!chromiumAvailable) context.skip('Chromium is unavailable locally; CI requires the browser contract.');
   });
 
-  it.each(CASES)('$name persists only evidenced bindings and replays without AI', async scenario => {
+  // Case completion saves every operation binding, including operations absent from confirms.
+  it.each(CASES)('$name persists every operation at completion and replays without AI', async scenario => {
     const app = await startFixtureApp();
     try {
       app.setPage('/sign-in-598', `<!doctype html><html lang="en"><body>
@@ -79,7 +80,7 @@ ${scenario.name === 'N1' ? '<button type="button">Sign out</button>' : ''}
             { id: 'fill-password', kind: 'action' as const, action: 'fill' as const, value: 'pw-598', intent: { description: 'Password field', roleHint: 'textbox', sourceSpan } },
           ]),
         { id: 'click-sign-in', kind: 'action', action: 'click', intent: { description: 'Sign in button', roleHint: 'button', sourceSpan, quote: { text: 'Sign in', sourceSpan: bodySpan(scenario.body, 'Sign in') } } },
-        { id: 'confirm-signed-in', kind: 'assert', check: 'text-visible', text: scenario.name === 'N1' ? 'Sign out' : 'Signed in as verifier', ...(scenario.name === 'N1' ? {} : { confirms: [...scenario.saved] }) },
+        { id: 'confirm-signed-in', kind: 'assert', check: 'text-visible', text: scenario.name === 'N1' ? 'Sign out' : 'Signed in as verifier', ...(scenario.name === 'N1' ? {} : { confirms: [...scenario.confirms] }) },
       ];
       await createFreshPlan(deps.storage, testPath, steps, targets);
       const groundingPath = deps.layout.groundingPathFor(testPath);
@@ -88,21 +89,18 @@ ${scenario.name === 'N1' ? '<button type="button">Sign out</button>' : ''}
       const first = await run(browserDeps, { ...DEFAULT_OPTIONS, updateCache: true });
       expect(first.results).toHaveLength(1);
       expect(first.results[0]?.result.status).toBe('passed');
+      expect(first.results[0]?.result.steps.map(({ id, status }) => ({ id, status }))).toEqual(steps.map(({ id }) => ({ id, status: 'passed' })));
       expect(executor.structuredRequests).toHaveLength(scenario.requests);
       expect(executor.agenticRequests).toHaveLength(0);
       const firstReport = buildRunReport({ startedAt: '2026-10-13T00:00:00Z', durationMs: 0, options: { allowEmpty: false, list: false }, outcome: first });
       assertDiagnosable(firstReport.envelope);
-      for (const id of scenario.missing.filter(id => id.startsWith('fill-'))) {
-        expect(first.results[0]?.result.steps.find(step => step.id === id)).toMatchObject({ status: 'passed', binding: { provenance: 'ai-proposed', confirmed: false } });
-      }
-      const persistedText = await deps.storage.exists(groundingPath) ? await deps.storage.readText(groundingPath) : undefined;
-      const grounding = persistedText === undefined ? undefined : GroundingDocument.parse(JSON.parse(persistedText));
-      expect(Object.keys(grounding?.entries ?? {}).sort()).toEqual([...scenario.saved].sort());
-      for (const id of scenario.missing) expect(grounding?.entries[id]).toBeUndefined();
-      for (const id of scenario.saved) {
-        expect(grounding?.schemaVersion).toBe(4);
-        expect(grounding?.entries[id]).toMatchObject({ kind: 'element', provenance: id === 'click-sign-in' ? 'quoted-match' : 'ai-proposed' });
-        expect(first.results[0]?.result.steps.find(step => step.id === id)).toMatchObject({ binding: { provenance: id === 'click-sign-in' ? 'quoted-match' : 'ai-proposed', confirmed: true } });
+      const persistedText = await deps.storage.readText(groundingPath);
+      const grounding = GroundingDocument.parse(JSON.parse(persistedText));
+      expect(grounding.schemaVersion).toBe(4);
+      expect(Object.keys(grounding.entries).sort()).toEqual([...scenario.operations].sort());
+      for (const id of scenario.operations) {
+        expect(grounding.entries[id]).toMatchObject({ kind: 'element', provenance: id === 'click-sign-in' ? 'quoted-match' : 'ai-proposed' });
+        expect(first.results[0]?.result.steps.find(step => step.id === id)).toMatchObject({ status: 'passed', binding: { provenance: id === 'click-sign-in' ? 'quoted-match' : 'ai-proposed', confirmed: true } });
       }
 
       const second = await run(browserDeps, { ...DEFAULT_OPTIONS, resolve: false });
@@ -111,17 +109,14 @@ ${scenario.name === 'N1' ? '<button type="button">Sign out</button>' : ''}
       assertDiagnosable(report.envelope);
       expect(executor.structuredRequests).toHaveLength(scenario.requests);
       expect(executor.agenticRequests).toHaveLength(0);
-      expect(await deps.storage.exists(groundingPath)).toBe(persistedText !== undefined);
-      if (persistedText !== undefined) expect(await deps.storage.readText(groundingPath)).toBe(persistedText);
+      expect(await deps.storage.readText(groundingPath)).toBe(persistedText);
       expect(second.results).toHaveLength(1);
-      if (scenario.name === 'P') {
-        expect(second.results[0]?.result.status).toBe('passed');
-        for (const id of scenario.saved) {
-          expect(second.results[0]?.result.steps.find(step => step.id === id)).toMatchObject({ binding: { provenance: 'grounding', confirmed: true } });
-        }
-      } else {
-        expect(second.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', details: { reason: 'missing', stepId: scenario.missing[0] } });
-        expect(report.envelope.errors[0]).toMatchObject({ code: 'GROUNDING_UNRESOLVED' });
+      expect(second.results[0]?.result.status).toBe('passed');
+      expect(second.results[0]?.result.steps.map(({ id, status }) => ({ id, status }))).toEqual(steps.map(({ id }) => ({ id, status: 'passed' })));
+      expect(second.results[0]?.error).toBeUndefined();
+      expect(report.envelope.errors).toEqual([]);
+      for (const id of scenario.operations) {
+        expect(second.results[0]?.result.steps.find(step => step.id === id)).toMatchObject({ binding: { provenance: 'grounding', confirmed: true } });
       }
     } finally {
       await app.stop();

@@ -75,7 +75,12 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 
 After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry. For a successful agentic execution ending in a snapshot or failed assertion, a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [repo:src/usecases/run.ts:2255-2266] [repo:src/usecases/run.ts:2565]
 
-An element entry MUST be written or overwritten only when its binding reaches `confirmed`. For that, at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches. A pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [repo:src/usecases/run.ts:149-180] [repo:src/usecases/run.ts:3472-3495] [repo:src/usecases/run.ts:4238-4247]
+An element entry MUST be written or overwritten only when its binding reaches `confirmed`. A binding reaches `confirmed` through either of two triggers:
+
+- At least one step names the element step in its non-empty committed `confirms` list, and every such step passes in the same case with a valid confirmation basis. An `element-visible` assertion provides a valid basis only when exactly one candidate matches.
+- Every step in the case passes. This confirms all remaining click, press, fill, fill-secret, and capture bindings, including actions absent from `confirms` and actions with multiple `element-visible` matches.
+
+If the case fails or is interrupted before completion, an `acted`-only binding MUST NOT be persisted. File writes remain subject to the write-back gate. [repo:src/usecases/run.ts:3559-3582] [repo:src/usecases/run.ts:3490-3524] [repo:src/usecases/run.ts:4431-4437] [repo:src/usecases/run.ts:4526-4536]
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [repo:src/usecases/run.ts:1158] [repo:src/usecases/run.ts:1356]
 

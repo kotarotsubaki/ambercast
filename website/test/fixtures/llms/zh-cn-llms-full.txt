@@ -1245,14 +1245,15 @@ CLI 的 `--strict` 选项和 MCP 的 `strict` 参数已移除。请从调用中�
 
 1. 运行 `npx ambercast check --json`，确认受影响的执行计划报告为 `stale`。
 2. 对每个过期的执行计划运行 `npx ambercast generate <file>`。查看 diff，确认体现某个输入效果的断言，其 `confirms` 列出了该输入。
-   - 如果 generate 对某个输入给出 `action-unconfirmed` 警告，请不要继续第 3 步。
-   - 普通的 run 会在该输入处以 `GROUNDING_UNRESOLVED` 失败。
-   - 请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
+   - `action-unconfirmed` 警告提示断言质量问题，不决定能否回放。
+   - 要提高验证质量，请加入能体现该输入效果的断言，例如登录后的用户名，然后重做第 2 步。
 3. 在本机运行 `npx ambercast run --resolve --update-cache <file>`。重新生成后定位缓存为空，所以对每个没有逐字引用的元素步骤，ambercast 会调用一次 AI。CI 默认不保存定位缓存。
 4. 运行 `npx ambercast check`，确认执行计划为 `fresh`。然后运行 `npx ambercast run <file>`，确认它通过且报告中的 `aiCalls` 为 0。
    - 执行计划始终提交。
    - 只有 `grounding.repositoryPolicy` 为 `committed` 时，才将定位缓存与执行计划一起提交。
    - 为 `uncommitted` 时，定位缓存保留在本地。
+
+早期版本只保存 `confirms` 列出的操作的绑定。现在，通过的 `run --resolve` 会在完成时保存所有操作的绑定，前提是允许写回。如果你曾为处理旧版警告而添加断言，可以保留这些断言；它们能提高验证质量。
 
 ## 验证 \{#verification}
 
@@ -1741,6 +1742,8 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
 经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
+
+用例的所有步骤都通过后，剩余操作和捕获步骤的绑定也会将 `confirmed` 设为 `true`。即使回写未获允许或写入失败，该值仍为 `true`，因此它不保证定位缓存文件已更新。
 
 每个已执行的 run 结果和每个已完成的 heal 结果，都为执行计划中的每个目标提供一个 `sessions` 条目。每个值为 `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`，其中 `state` 为 `not-opened`、`closed` 或 `close-failed`。`not-opened` 表示该目标的启动没有返回会话，包括执行在其第一个步骤之前就停止的情况。关闭失败不会改变用例状态。
 
@@ -3685,7 +3688,12 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 成功回放现有轨迹之后，实现必须 (MUST) 保持该条目不变。实现必须 (MUST) 只在智能体执行成功且精确覆盖了终态成功准则之后，才写入或覆盖 AI 条目。智能体执行成功但最后一次观测是快照或失败的断言时，冷路径必须 (MUST) 不写入任何条目。智能体执行成功但最后一次观测是快照或失败的断言时，回退路径必须 (MUST) 删除引发回退的陈旧条目。智能体执行失败或中止之后，实现必须 (MUST) 保持已有条目不变 (`src/usecases/run.ts:2255-2266`) (`src/usecases/run.ts:2565`)。
 
-元素条目只有在其绑定达到 `confirmed` 时，才可以写入或覆盖，这一点是必须 (MUST) 遵守的。为此，至少有一个步骤必须在自己的非空已提交 `confirms` 列表中列出该元素步骤，并且每个这样的步骤都必须在同一个用例中通过。对于 `element-visible` 的确认断言，只有恰好一个候选匹配时，这次通过才算有效的确认依据。多个匹配的通过不会确认该绑定。只达到 `acted` 的绑定在写回时丢弃，从不持久化 (`src/usecases/run.ts:149-180`) (`src/usecases/run.ts:3472-3495`) (`src/usecases/run.ts:4238-4247`)。
+元素条目只有在绑定达到 `confirmed` 时才可以写入或覆盖，这是必须 (MUST) 遵守的条件。以下任一情况都会使绑定达到 `confirmed`：
+
+- 至少一个步骤在其非空的已提交 `confirms` 列表中列出该元素步骤，且所有这样的步骤都在同一用例中以有效依据通过。`element-visible` 断言只有在恰好一个候选匹配时才提供有效的确认依据。
+- 用例的所有步骤都通过。剩余的 click、press、fill、fill-secret 和 capture 绑定都会确认。其中包括未列在 `confirms` 中的操作，以及 `element-visible` 匹配到多个候选的操作。
+
+用例中途失败或中断时，不得 (MUST NOT) 持久化只达到 `acted` 的绑定。写入文件仍需回写开关允许 (`src/usecases/run.ts:3559-3582`) (`src/usecases/run.ts:3490-3524`) (`src/usecases/run.ts:4431-4437`) (`src/usecases/run.ts:4526-4536`)。
 
 对于每个 `TraceFillSecret`，`secretRef` 必须 (MUST) 属于包含它的执行计划 AI 步骤中已提交的 `secrets[].ref` 集合。违反属于完整性失败，并且不得 (MUST NOT) 回退到智能体执行 (`src/usecases/run.ts:1158`) (`src/usecases/run.ts:1356`)。
 
@@ -4024,6 +4032,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| 用例的所有步骤都通过后，click、press、fill、fill-secret 和 capture 的定位缓存条目也会在允许回写时保存。定位缓存格式不变。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 无需迁移。 |
 | provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
 | report 3.10 → 3.11 新增 `generator-assumption` 警告。Stage 3 接受的假设仅出现在 `healed` 行的可选 `warnings` 中。假设不会阻止 generate 或 heal。单目标响应的歧义变为可重试的 `AI_RESPONSE_INVALID`，退出码为 3。多目标分配未确定时仍为 `PROMPT_AMBIGUOUS`，退出码为 2。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 验证封闭 union 的使用者必须 (MUST) 使用 3.11 Schema。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
 | 移除 CLI 的 `--strict` 及 MCP generate 输入 `strict`。 | `repo:src/core/cli/manifest.ts`, `repo:src/adapters/mcp/tool-schemas.ts` | 从调用中删除两者。`generate --strict` 因未知选项以退出码 2 结束，MCP 拒绝 `strict`。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |
@@ -4161,7 +4170,13 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 `--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。对含有元素绑定步骤的执行计划，不带 `--resolve` 时 `run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
 
-带 `--resolve` 时，元素未命中会实时解析。只有确认该绑定的所有步骤都通过，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
+带 `--resolve` 时，元素未命中会实时解析。要在用例运行过程中确认绑定，至少一个步骤必须在 `confirms` 中列出该操作。当这些步骤都以有效依据通过时，ambercast 将条目列为待保存内容。
+
+用例的所有步骤都通过后，剩余的操作和 capture 条目也会列入。操作包括 click、press、fill 和 fill-secret。其中包括未列在 `confirms` 中的操作，以及 `element-visible` 断言匹配到多个候选的操作。
+
+用例中途失败或中断时，元素条目只有通过 `confirms` 确认后才可以保存。写入文件还需要回写开关允许。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
+
+用例通过且定位缓存保存成功后，同一执行计划可从相同页面状态开始回放，无需调用 AI。`ai` 步骤仍然只有在通过且留下验证记录时才创建条目。没有留下记录的通过仍需要在回放时使用 `--resolve`。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)、[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 

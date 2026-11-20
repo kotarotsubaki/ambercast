@@ -36,7 +36,13 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 `--resolve` が扱うのは、グラウンディングが無い場合と、構造は有効で回復できるエントリの場合だ。廃止された形式のバージョンで書かれたグラウンディングも、ここに入る。要素に結び付くステップを持つ計画（plan）では、`--resolve` を付けない `run` がこれを `GROUNDING_UNRESOLVED` と報告し、`run --resolve --update-cache` が作り直す。
 
-`--resolve` を付けると、要素のミスはその場で解決する。解決したエントリを書くのは、バインディングを確かめる全ステップが合格し、ライトバックのゲートが許したときだけだ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
+`--resolve` を付けると、要素のミスはその場で解決する。ケースの途中で確認済みにするには、少なくとも 1 つのステップが操作を `confirms` に挙げる必要がある。該当する全ステップが有効な根拠で合格すると、ambercast はエントリを保存対象にする。
+
+ケースの全ステップが合格すると、残りの操作と capture のエントリも保存対象になる。操作には click・press・fill・fill-secret が含まれる。`confirms` に挙がらない操作や、`element-visible` の一致が複数ある操作も含まれる。
+
+ケースが途中で失敗・中断した場合、要素のエントリは `confirms` で確認済みになったものだけが保存対象である。ファイルへの保存には、ライトバックのゲートの許可が必要だ。ゲートは `localWriteBack`、`--update-cache`、`ci.updateGroundingCache` で決まる。
+
+ケースが合格してグラウンディングの保存も成功すると、同じ計画と画面の状態から AI なしで再生できる。ただし、`ai` ステップのエントリは、検証の記録を残して合格したときだけ作る。記録を残さずに合格した `ai` ステップは、引き続き再生時に `--resolve` が必要である。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#grounding-write-back)、[グラウンディングのライトバック制御](/ambercast/ja/how-to/control-grounding-writeback/)
 

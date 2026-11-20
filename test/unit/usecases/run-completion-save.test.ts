@@ -294,18 +294,19 @@ describe('completion save', () => {
     expect(outcome.results[0]!.result.steps[0]).toMatchObject({ binding: { confirmed: unique } });
   });
 
-  it.each(['assertion', 'classified', 'exception', 'interrupted'] as const)(
-    'TEST-SAVE-6 retains confirmed and AI entries but discards acted bindings on %s', async (ending) => {
+  it.each((['assertion', 'classified', 'exception', 'interrupted'] as const)
+    .flatMap(ending => [false, true].map(skipAssertObservation => ({ ending, skipAssertObservation }))))(
+    'TEST-SAVE-6 retains confirmed and AI entries but discards acted bindings on $ending (skip observation=$skipAssertObservation)', async ({ ending, skipAssertObservation }) => {
       for (const withConfirmer of [true, false]) {
         const controller = new AbortController();
+        let failingStepStarted = false;
         const steps = [click(), ...(withConfirmer ? [check('confirm', ['click-submit'])] : []), fill(), aiStep(), check('failure')];
         const f = await fixture(steps, {
           signal: controller.signal,
           configureSession(session) {
-            let calls = 0;
             vi.spyOn(session, 'evaluateAssert').mockImplementation(async () => {
-              calls += 1;
-              if (calls <= (withConfirmer ? 2 : 1)) return { passed: true };
+              // Reads leave the page stable; only the final step introduces the fault.
+              if (!failingStepStarted) return { passed: true };
               if (ending === 'classified') throw new FsIoError('Final observation failed.');
               if (ending === 'exception') throw new Error('Final observation crashed.');
               if (ending === 'interrupted') { controller.abort(); controller.signal.throwIfAborted(); }
@@ -313,7 +314,12 @@ describe('completion save', () => {
             });
           },
         });
-        const outcome = await execute(f);
+        const emit = f.deps.events.emit.bind(f.deps.events);
+        const outcome = await run({ ...f.deps, events: { emit(event) {
+          emit(event);
+          if (event.type === 'step-start' && event.stepId === 'failure') failingStepStarted = true;
+        } } }, { ...DEFAULT_OPTIONS, skipAssertObservation });
+        report(outcome);
         expect(outcome.results[0]!.result.status).toBe(ending === 'assertion' ? 'failed' : 'error');
         const results = outcome.results[0]!.result.steps;
         expect(results.slice(0, -1).every((step) => step.status === 'passed')).toBe(true);

@@ -77,6 +77,49 @@ const LISTED_RUN_RESULT = {
   file: 'tests/login.test.md',
   status: 'listed',
 };
+
+describe('run assertion warning compatibility', () => {
+  const warning = { kind: 'assert-held-before-actions', stepId: 'assert-heading' };
+
+  it('TEST-READY-5 accepts legacy run fields without warnings and preserves ordered warnings', () => {
+    expect(RunResult.parse(RUN_RESULT)).toEqual(RUN_RESULT);
+    for (const warnings of [[], [warning], [warning, { ...warning, stepId: 'assert-other' }]]) {
+      expect(RunResult.parse({ ...RUN_RESULT, warnings })).toEqual({ ...RUN_RESULT, warnings });
+    }
+  });
+
+  it.each([
+    { ...warning, extra: true }, { ...warning, kind: 'other' },
+    { kind: warning.kind }, { ...warning, stepId: 1 },
+    { kind: 'generator-assumption', message: 'An assumption.' },
+  ])('TEST-READY-5 rejects malformed or foreign run warnings %j', invalid => {
+    expectAccepted(RunResult, { ...RUN_RESULT, warnings: [warning] });
+    expectRejected(RunResult, { ...RUN_RESULT, warnings: [invalid] });
+  });
+
+  it('TEST-READY-5 rejects non-array warnings and warnings on unexecuted run rows', () => {
+    for (const warnings of [null, warning, 'warnings', [null]]) {
+      expectRejected(RunResult, { ...RUN_RESULT, warnings });
+    }
+    expectAccepted(RunResult, LISTED_RUN_RESULT);
+    expectRejected(RunResult, { ...LISTED_RUN_RESULT, warnings: [] });
+    expectRejected(RunResult, { id: 'login', file: 'login.test.md', status: 'skipped', warnings: [warning] });
+  });
+
+  it('TEST-READY-5 keeps heal warning variants independent of run warnings', () => {
+    const warnings = [{ kind: 'generator-assumption', message: 'An assumption.' }];
+    expectAccepted(HealResult, { ...HEAL_RESULT, warnings });
+    expectRejected(HealResult, { ...HEAL_RESULT, warnings: [warning] });
+    for (const row of [
+      { ...HEAL_RESULT, repairOutcome: 'partially-healed' },
+      { ...HEAL_RESULT, repairOutcome: 'unresolved', application: 'no-artifact-change' },
+      { ...HEAL_RESULT, repairOutcome: 'no-changes-needed', application: 'no-artifact-change' },
+    ]) {
+      expectAccepted(HealResult, row);
+      for (const warnings of [[], [warning]]) expectRejected(HealResult, { ...row, warnings });
+    }
+  });
+});
 const HEAL_RESULT = {
   id: 'login-succeeds',
   file: 'tests/login.test.md',

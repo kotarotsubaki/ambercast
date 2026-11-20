@@ -97,6 +97,33 @@ describe('human replay readiness guidance', () => {
   });
 });
 
+describe('human assertion observation warnings', () => {
+  const message = 'this assertion already held before the preceding actions ran, so it may not verify their effect';
+  function render(ids: readonly string[], replayReadiness?: unknown) {
+    return renderHumanReport({ ...RUN_ENVELOPE, results: [{
+      id: 'login', file: 'login.test.md', planFile: 'login.ambercast.plan.json', status: 'passed',
+      durationMs: 0, steps: [], sessions: {}, explanation: 'Replay finished.',
+      warnings: ids.map(stepId => ({ kind: 'assert-held-before-actions', stepId })),
+      ...(replayReadiness === undefined ? {} : { replayReadiness }),
+    }] } as never, false);
+  }
+
+  it('TEST-WARN-8 prints each warning below its case in supplied plan order', () => {
+    expect(render(['second', 'first'])).toBe(`passed login.test.md\n  warning: second: ${message}\n  warning: first: ${message}\n`);
+    expect(render([])).toBe('passed login.test.md\n');
+  });
+
+  it('TEST-WARN-8 escapes control characters in assertion IDs without adding terminal lines', () => {
+    expect(render(['assert\n\r\t\u001b\u007f\u0085'])).toBe(`passed login.test.md\n  warning: assert\\n\\r\\t\\u001b\\u007f\\u0085: ${message}\n`);
+  });
+
+  it('TEST-WARN-8 places ordered warnings before replay guidance on passed not-ready cases', () => {
+    expect(render(['second', 'first'], { status: 'not-ready', reason: 'grounding-missing' })).toBe(
+      `passed login.test.md\n  warning: second: ${message}\n  warning: first: ${message}\n  replay: not ready (run "ambercast run --resolve --update-cache login.test.md")\n`,
+    );
+  });
+});
+
 // SPEC-9: the captured v3 fixture still lists target selection for replay commands.
 const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8')
   .replace('  --grep <pattern>  --target <name>  --headed', '  --grep <pattern>  --headed')

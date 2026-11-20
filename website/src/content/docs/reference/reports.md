@@ -56,7 +56,7 @@ Every `RunResult` branch is strict.
 
 | status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness`, `warnings` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
@@ -75,6 +75,35 @@ Each `steps` item is `{ id, reason }`. The reason is `no-entry` for a missing en
 The assessment uses the file read again after grounding write-back processing. A `not-ready` result adds `unsavedReason: 'write-back-not-allowed'` only when changes needed saving but write-back permission prevented it. A write failure instead appears as a case error and does not add this field.
 
 `replayReadiness` is optional in the schema. Reports from 3.11 and earlier remain readable without it. Readiness changes neither the case verdict nor the exit code.
+
+### Assertions that already held before actions {#assertion-warnings}
+
+On `run` results, `warnings` identifies an assertion that already held before the preceding actions as `{ kind: 'assert-held-before-actions', stepId }`. The `stepId` names an assert that also passed during execution. That assertion may not verify the effect of the actions between the previous check and this one.
+
+The warning itself changes neither the verdict nor the exit code, so a passing assertion still passes. To improve the assertion, check something that becomes true only when the action takes effect, such as text that appears only afterwards. See the [prompt examples](/ambercast/how-to/write-effective-prompts/#quote-new-text).
+
+A check block is a sequence of consecutive asserts. An interval starts after the preceding check block and ends at the end of the next block; the first interval starts at the case's beginning. A capture separates check blocks but does not count as an action.
+
+If an interval contains click, press, fill, fill-secret, navigate, or an ai step, ambercast evaluates each assert in its final check block once before the first action. This covers text-visible, element-visible, text-equals, url-matches, and element-count. It excludes checks inside AI steps and intervals without actions.
+
+Observation only reads the page and does not add or change actions, AI calls, events, or saved artifacts. If the target's session has not started, ambercast skips observation without starting it. Unavailable observations and expected values that differ after variable expansion at execution time produce no warning.
+
+The behavior is the same with and without `--resolve`. Replays inside heal do not observe assertions, and heal rows do not carry this warning. The `generator-assumption` warnings on `healed` rows are separate.
+
+Cases that obtain a valid, fresh plan include `warnings`, with an empty array when none apply. Cases that later fail or error retain warnings for assertions that already passed, in plan order. Cases that stop before obtaining the plan omit the field.
+
+The schema makes `warnings` optional. Older reports without it remain readable. Human-readable output prints one line per warning below the case row, before any replay-readiness guidance.
+
+```text
+  warning: <stepId>: this assertion already held before the preceding actions ran, so it may not verify their effect
+```
+
+The warning has these limits:
+
+- Valid checks that state stays unchanged, such as navigating to the same page again, can also trigger it.
+- Observation happens only before the interval's first action. If an assertion becomes true midway through the interval, it triggers no warning even if it misses a later action's effect.
+- Unfinished rendering from a preceding action can cause observation to miss a warning.
+- Observation can delay the start of later steps. In apps that change over time, an action on a briefly visible target can fail because of this delay.
 
 ## Check results {#check-results}
 

@@ -200,7 +200,33 @@ Where `attempts` appears, it is `Array<{ attempt: integer 1–5, code: ReportErr
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` Case scope only. |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. See the tables below for the additional optional fields. |
+
+The additional `GROUNDING_UNRESOLVED` diagnostics appear only when initial target selection fails. At this stage, AI can propose an element, or a quotation can uniquely identify a candidate without an AI call.
+
+| Optional field | Meaning |
+| --- | --- |
+| `proposalOutcome` | The AI response type: `none` means no candidate, `ambiguous` means an ambiguous response, and `found` means a proposal. |
+| `proposalRole`, `proposalName` | The role and name of the element proposed by AI, using the AI response values. An empty name still appears. ambercast redacts secret values and run variable values. |
+| `proposalMatchCount` | The number of page matches for the proposal, as a non-negative integer including 0. |
+| `rejection` | Why ambercast rejected the proposal: `not-unique` means no unique match; `snapshot-invalid` means an invalid page snapshot. `fingerprint-unavailable` means no candidate fingerprint; `role-mismatch` means the role does not fit the intent. |
+| `verification` | The re-observation result when the target changes immediately before the action. Values match grounding refresh reasons: `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, or `secret-contaminated`. |
+
+In the next table, “proposal fields” means `proposalOutcome: "found"`, `proposalRole`, and `proposalName`.
+
+| Stop point | Additional fields |
+| --- | --- |
+| AI returns no candidate or an ambiguous response | Only `proposalOutcome`, set to `none` or `ambiguous`. |
+| The AI proposal has no unique page match | Proposal fields, `rejection: "not-unique"`, and `proposalMatchCount`. |
+| The page snapshot is invalid when matching the AI proposal | Proposal fields and `rejection: "snapshot-invalid"`. |
+| The candidate fingerprint is unavailable or its role does not fit the intent | `rejection: "fingerprint-unavailable"` or `rejection: "role-mismatch"`. Proposal fields also appear if AI proposed the candidate. |
+| The target changes during re-observation immediately before the action | `verification`. Proposal fields also appear if AI proposed the candidate. |
+
+Candidates selected uniquely from a quotation have no proposal fields. Human-readable CLI output and viewer errors display existing fields after `stepId` and `reason` in this order: `proposalOutcome`, `proposalRole`, `proposalName`, `proposalMatchCount`, `rejection`, `verification`.
+
+These diagnostics distinguish failure causes. They do not fix variation in initial target selection between runs.
+
+The `reason` vocabulary, `message`, `hint`, exit code, and rerun procedure stay the same. Other `GROUNDING_UNRESOLVED` details, such as those for `missing`, also stay the same.
 
 For `AI_RESPONSE_INVALID`, the issue `code` is any of these values:
 

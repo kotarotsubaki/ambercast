@@ -19,7 +19,9 @@ export const ERROR_DETAILS_KEY_ORDER: Readonly<Record<string, readonly string[]>
   AI_EXECUTOR_UNAVAILABLE: ['attempts'],
   UNEXPECTED_CRASH: ['cause'],
   FS_IO_ERROR: ['partiallyWritten'],
-  GROUNDING_UNRESOLVED: ['stepId', 'reason'],
+  // A shared projection keeps binding diagnostics in the same reading order
+  // in the CLI and viewer while each consumer owns its output escaping.
+  GROUNDING_UNRESOLVED: ['stepId', 'reason', 'proposalOutcome', 'proposalRole', 'proposalName', 'proposalMatchCount', 'rejection', 'verification'],
   CASE_ABORTED: ['reason', 'stepId'],
   PROMPT_AMBIGUOUS: ['ambiguities'],
 };

@@ -240,7 +240,17 @@ export function projectReportErrorDetails(
       parsed = SecretSyntaxRejectedDetails.safeParse({ occurrences: readRecordField(sourceDetails, 'occurrences') });
       break;
     case 'grounding-unresolved': {
-      const candidate = GroundingUnresolvedDetails.safeParse({ stepId: readRecordField(sourceDetails, 'stepId'), reason: readRecordField(sourceDetails, 'reason') });
+      // An empty proposal name and a zero match count remain evidence. The
+      // reason alone determines guidance so diagnostics do not change policy.
+      const candidate = GroundingUnresolvedDetails.safeParse({
+        stepId: readRecordField(sourceDetails, 'stepId'), reason: readRecordField(sourceDetails, 'reason'),
+        ...(readRecordField(sourceDetails, 'proposalOutcome') === undefined ? {} : { proposalOutcome: readRecordField(sourceDetails, 'proposalOutcome') }),
+        ...(readRecordField(sourceDetails, 'proposalRole') === undefined ? {} : { proposalRole: readRecordField(sourceDetails, 'proposalRole') }),
+        ...(readRecordField(sourceDetails, 'proposalName') === undefined ? {} : { proposalName: readRecordField(sourceDetails, 'proposalName') }),
+        ...(readRecordField(sourceDetails, 'proposalMatchCount') === undefined ? {} : { proposalMatchCount: readRecordField(sourceDetails, 'proposalMatchCount') }),
+        ...(readRecordField(sourceDetails, 'rejection') === undefined ? {} : { rejection: readRecordField(sourceDetails, 'rejection') }),
+        ...(readRecordField(sourceDetails, 'verification') === undefined ? {} : { verification: readRecordField(sourceDetails, 'verification') }),
+      });
       parsed = candidate;
       if (candidate.success) groundingHint = groundingUnresolvedHint(candidate.data.reason);
       break;

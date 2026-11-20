@@ -6,6 +6,15 @@ import {
 } from '#core/errors/grounding-unresolved-error.js';
 
 describe('GroundingUnresolvedError', () => {
+  it('retains every optional diagnostic, including an empty name and zero matches', () => {
+    const details = { stepId: 'submit', reason: 'proposal-rejected', proposalOutcome: 'found', proposalRole: 'button', proposalName: '', proposalMatchCount: 0, rejection: 'not-unique', verification: 'element-not-found' } as const;
+    const cause = new Error('target changed');
+    const error = new GroundingUnresolvedError('The target cannot be bound.', details, { cause });
+    expect(error.details).toEqual(details);
+    expect(error.message).toBe('The target cannot be bound.');
+    expect(error.cause).toBe(cause);
+    expect(error.exitCode).toBe(4);
+  });
   it('has the fixed classification and fail-closed exit status', () => {
     const error = new GroundingUnresolvedError('Grounding is unavailable.', { stepId: 'sign-in', reason: 'missing' });
 

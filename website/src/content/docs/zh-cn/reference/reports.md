@@ -212,7 +212,33 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` 仅用例作用域。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。新增可选字段见下表。 |
+
+`GROUNDING_UNRESOLVED` 的新增诊断仅在首次确定目标失败时出现。在这一阶段，AI 可以提出元素候选，也可能由引文唯一确定候选而无需调用 AI。
+
+| 可选字段 | 含义 |
+| --- | --- |
+| `proposalOutcome` | AI 的响应类型。`none` 表示没有候选，`ambiguous` 表示响应有歧义，`found` 表示提出了候选。 |
+| `proposalRole`、`proposalName` | AI 提出的元素的 role 和名称，采用 AI 响应中的值。名称为空字符串时也会输出。ambercast 会遮蔽机密值和 run 变量的值。 |
+| `proposalMatchCount` | 提议在页面上的匹配数量，为包含 0 的非负整数。 |
+| `rejection` | ambercast 未采纳提议的原因。`not-unique` 表示无法唯一匹配，`snapshot-invalid` 表示页面快照无效。`fingerprint-unavailable` 表示无法获取候选指纹，`role-mismatch` 表示 role 与意图不符。 |
+| `verification` | 操作前再次观察时目标发生变化的结果。取值与重新定位的原因相同：`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid` 或 `secret-contaminated`。 |
+
+下表中的提议的三个字段指 `proposalOutcome: "found"`、`proposalRole` 和 `proposalName`。
+
+| 停止时的情况 | 新增字段 |
+| --- | --- |
+| AI 回答没有候选或有歧义 | 仅有 `proposalOutcome`，值为 `none` 或 `ambiguous`。 |
+| AI 的提议在页面上无法唯一匹配 | 提议的三个字段、`rejection: "not-unique"` 和 `proposalMatchCount`。 |
+| 匹配 AI 提议时页面快照无效 | 提议的三个字段和 `rejection: "snapshot-invalid"`。 |
+| 无法获取候选指纹，或 role 与意图不符 | `rejection: "fingerprint-unavailable"` 或 `rejection: "role-mismatch"`。若候选来自 AI 提议，还会输出提议的三个字段。 |
+| 操作前再次观察时目标发生变化 | `verification`。若候选来自 AI 提议，还会输出提议的三个字段。 |
+
+通过引文唯一确定的候选不带提议的三个字段。CLI 的人类可读输出和查看器的错误显示采用相同顺序。在 `stepId`、`reason` 之后，依次显示存在的 `proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification`。
+
+这些诊断用于区分失败原因。它们不会解决首次确定目标在不同运行之间波动的问题。
+
+`reason` 的取值、`message`、`hint`、退出码和重新运行的步骤保持不变。`missing` 等其他 `GROUNDING_UNRESOLVED` 的 `details` 也保持不变。
 
 `AI_RESPONSE_INVALID` 的问题 `code` 可以是下列任一值：
 

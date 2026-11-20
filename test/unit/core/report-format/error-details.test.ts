@@ -20,6 +20,19 @@ const CASES = [
 ] as const;
 
 describe('errorDetailEntries', () => {
+  it('TEST-DIAG-4 projects all grounding diagnostics in the shared order', () => {
+    const expected = [['stepId', 'submit'], ['reason', 'proposal-rejected'], ['proposalOutcome', 'found'], ['proposalRole', 'button'], ['proposalName', ''], ['proposalMatchCount', '0'], ['rejection', 'not-unique'], ['verification', 'element-not-found']];
+    expect(ERROR_DETAILS_KEY_ORDER.GROUNDING_UNRESOLVED).toEqual(expected.map(([key]) => key));
+    expect(errorDetailEntries('GROUNDING_UNRESOLVED', {
+      verification: 'element-not-found', rejection: 'not-unique', proposalMatchCount: 0, proposalName: '',
+      proposalRole: 'button', proposalOutcome: 'found', reason: 'proposal-rejected', stepId: 'submit',
+    })).toEqual(expected);
+  });
+  it('TEST-DIAG-4 skips absent diagnostics without shifting the remaining order', () => {
+    expect(errorDetailEntries('GROUNDING_UNRESOLVED', { verification: 'ambiguous-match', proposalName: '', reason: 'candidate-changed', stepId: 'submit' })).toEqual([
+      ['stepId', 'submit'], ['reason', 'candidate-changed'], ['proposalName', ''], ['verification', 'ambiguous-match'],
+    ]);
+  });
   it('covers every ordered report code', () => {
     expect(CASES.map(([code]) => code)).toEqual(Object.keys(ERROR_DETAILS_KEY_ORDER));
   });

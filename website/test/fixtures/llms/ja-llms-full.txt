@@ -1638,7 +1638,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/reports/
 
 | フィールド | 型と規則 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.11` |
+| `schemaVersion` | リテラル `3.12` |
 | `command` | `generate`、`run`、`check`、`heal`、`review` のいずれか |
 | `startedAt` | `YYYY-MM-DDTHH:mm:ssZ` 形式の UTC 文字列 |
 | `durationMs` | 非負の整数 |
@@ -1683,9 +1683,25 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 
 | ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+
+`run` は、有効で鮮度が保たれた計画を得たケースに `replayReadiness` を出す。`failed` と `error` のケースも対象である。計画を得る前に終了したケースと `heal` の行には出さない。
+
+`ready` は、AI なしの再生に必要な項目がグラウンディングファイルに揃っている状態である。画面が変わって項目が合わなくなる場合は、この判定の対象外である。対象は click、press、fill、fill-secret、capture、ai のステップで、対象がない計画は `ready` になる。
+
+| `status` | ほかのフィールド |
+| --- | --- |
+| `ready` | なし |
+| `not-ready` | `reason`: `grounding-missing`、`grounding-invalid`、`grounding-stale`、`grounding-unreadable` のいずれか |
+| `not-ready` | `reason: 'steps-unresolved'` と、計画の順に並ぶ空でない `steps` 配列 |
+
+`steps` の各項目は `{ id, reason }` である。`reason` は、項目がない `no-entry`、種類や意図が合わない `entry-mismatch`、AI ステップの記録が再生に必要な検証を含まない `trace-uncovered` のいずれかである。
+
+判定は、書き戻しの処理後にファイルを読み直した内容を使う。`not-ready` で、保存すべき変更を書き戻しの許可がないため保存しなかった場合だけ、`unsavedReason: 'write-back-not-allowed'` が付く。書込みの失敗ではこの項目を付けず、ケースのエラーで伝える。
+
+`replayReadiness` はスキーマ上任意である。この項目がない 3.11 以前のレポートも読める。準備状態によってケースの合否や終了コードは変わらない。
 
 ## check の結果 {#check-results}
 
@@ -1693,10 +1709,13 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 
 | ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile`, `replayReadiness` | — |
+| `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
+
+`replayReadiness` が付くのは `fresh` の行だけである。値は `{ status: 'ready' }` か、`status: 'not-ready'`、`reason: 'steps-unresolved'`、`steps` を持つオブジェクトになる。`steps` の形は [run の結果](#run-results) と同じである。`check` は `unsavedReason` を出さない。`fresh-without-grounding` など、ほかのステータスの行には `replayReadiness` を出さない。
 
 ## heal の結果 {#heal-results}
 
@@ -1839,16 +1858,16 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 現在のスキーマのバージョンに固定されるのは、書き込み側だけである。ビューアーは、3.x のレポートであれば寛容に読む。次の例は、コマンドごとのエンベロープを 1 つずつ示す。
 
 ```json
-{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換アンカー {#report-persistence}
@@ -2095,7 +2114,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がない） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.11"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 廃止された契約の利用者のために、凍結済みのスナップショットを 5 つ残している。サイトはコミット済みのファイルからこれらを公開し、npm パッケージはエクスポートしない。
 
@@ -2118,7 +2137,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | `plan.schema.json` | 計画の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 に変換した Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | グラウンディングの `schemaVersion` が 4 であり、`planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 に変換した Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須で、宣言される設定はそれ以外すべて任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 に変換した Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.11 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.12 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行する。このスクリプトはスキーマディレクトリを再帰的に作成し、上記 4 つのスキーマファイルを書き出す。`dist/manifest/` 配下にはマニフェストファイルも書き出す。
 
@@ -2134,7 +2153,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされる。このスキーマは、構造化されたレポートエンベロープとコマンド固有の結果を検証する。対象には、Report の `schemaVersion` 3.11、必須のステップ Target 識別情報、実行された run と完了した heal の結果にあるセッション一覧が含まれる。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされる。このスキーマは、構造化されたレポートエンベロープとコマンド固有の結果を検証する。対象には、Report の `schemaVersion` 3.12、必須のステップ Target 識別情報、実行された run と完了した heal の結果にあるセッション一覧が含まれる。
 
 ## 関連項目 {#see-also}
 
@@ -2861,6 +2880,20 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 
 実行結果ステータスは `passed`・`failed`・`error`・`listed`・`skipped` のいずれかであり、プロセス終了コードの値と優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) が定める。
 
+ケースが `passed` で `replayReadiness.status` が `not-ready` の場合、人向けの出力は結果の下に次の 1 行を表示する。
+
+```text
+  replay: not ready (run "ambercast run --resolve --update-cache <file>")
+```
+
+書き戻しの許可がなく変更を保存しなかった場合は、代わりに次の行を表示する。
+
+```text
+  replay: not ready (the grounding was not saved; rerun with --update-cache)
+```
+
+`<file>` は対象のプロンプトのパスである。`failed` と `error` のケースにはこの行を表示しない。JSON では、計画を得た後の失敗したケースにも任意の `replayReadiness` が付く。準備状態は終了コードを変えない。[レポート](/ambercast/ja/reference/reports/#run-results) が値と判定の範囲を定義する。
+
 関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#run-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)、[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)
 
 ---
@@ -2905,6 +2938,16 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/check/
 ## 結果 {#results}
 
 完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、このうち `id`・`file`・`artifactFile` が成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
+
+`fresh` の行には、任意の `replayReadiness` が付く。値は `ready` か、理由が `steps-unresolved` の `not-ready` である。ほかのステータスの行には付かない。準備状態は行の `status`、`reason`、終了コードを変えない。
+
+理由が `steps-unresolved` の場合、人向けの出力は結果の下に次の 1 行を表示する。
+
+```text
+  replay: not ready (<n> steps without usable grounding: <ids>; run "ambercast run --resolve --update-cache <file>")
+```
+
+`<n>` は対象ステップの数、`<ids>` はその ID を `, ` でつないだ文字列である。1 件の場合は `1 step` と表示する。`<file>` は対象のプロンプトのパスである。
 
 ## 読み取り専用の検査 {#read-only-contract}
 
@@ -3207,7 +3250,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 | 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
 | フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 
 ## 読解順序 {#reading-order}
 
@@ -4050,6 +4093,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| report 3.11 → 3.12 は任意の `replayReadiness` を追加する。 | `repo:src/report/schema.ts:58` | この項目がない旧版のレポートも読める。計画 5 とグラウンディング 4 は変わらず、再生成は不要である。 |
 | ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
 | report 3.10 → 3.11 は `generator-assumption` の警告を追加する。Stage 3 で採用した仮定は `healed` 行だけの任意の `warnings` に載る。仮定では generate や heal を止めない。単一ターゲットの応答の曖昧さは再試行可能な `AI_RESPONSE_INVALID` と終了コード 3 になる。複数ターゲットの未確定は `PROMPT_AMBIGUOUS` と終了コード 2 のままである。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 閉じた union を検証する利用者は 3.11 のスキーマを使わなければならない（MUST）。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |

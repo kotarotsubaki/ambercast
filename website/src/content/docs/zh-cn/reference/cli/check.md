@@ -41,6 +41,16 @@ description: 检查执行计划与定位缓存新鲜度的 ambercast check 的�
 
 完整的检查发现包含 `id`、`file`、`planFile`、`status` 和 `reason`。`groundingFile` 或 `artifactFile` 只在作为该发现的证据时出现。状态为 `invalid-artifact-name` 的发现是例外：它没有 `planFile`，而是包含 `id`、`file`、`status`、`reason` 和 `artifactFile`，其中 `id`、`file` 和 `artifactFile` 指向产物本身。完整的字段定义和报告结构见[报告](/ambercast/zh-cn/reference/reports/#check-results)。
 
+`fresh` 行带可选的 `replayReadiness`。其值为 `ready`，或理由为 `steps-unresolved` 的 `not-ready`。其他状态的行不含此字段。准备状态不会改变行的 `status`、`reason` 或退出码。
+
+理由为 `steps-unresolved` 时，面向人的输出会在结果下方打印一行：
+
+```text
+  replay: not ready (<n> steps without usable grounding: <ids>; run "ambercast run --resolve --update-cache <file>")
+```
+
+`<n>` 是涉及的步骤数，`<ids>` 是用 `, ` 连接的步骤 ID。只有一个步骤时显示 `1 step`。`<file>` 是提示词路径。
+
 ## 只读检查 {#read-only-contract}
 
 `check` 是只读的。它的依赖不含 AI 运行时、浏览器驱动、事件派发器和写入存储。运行时它组合只读存储、文件布局规则和发现机制，详见[文件布局](/ambercast/zh-cn/reference/file-layout/#companions)与[配置](/ambercast/zh-cn/reference/configuration/#file-selection)。

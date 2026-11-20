@@ -11,7 +11,7 @@ description: ambercast の構造化 JSON レポートのエンベロープ、コ
 
 | フィールド | 型と規則 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.11` |
+| `schemaVersion` | リテラル `3.12` |
 | `command` | `generate`、`run`、`check`、`heal`、`review` のいずれか |
 | `startedAt` | `YYYY-MM-DDTHH:mm:ssZ` 形式の UTC 文字列 |
 | `durationMs` | 非負の整数 |
@@ -56,9 +56,25 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 
 | ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+
+`run` は、有効で鮮度が保たれた計画を得たケースに `replayReadiness` を出す。`failed` と `error` のケースも対象である。計画を得る前に終了したケースと `heal` の行には出さない。
+
+`ready` は、AI なしの再生に必要な項目がグラウンディングファイルに揃っている状態である。画面が変わって項目が合わなくなる場合は、この判定の対象外である。対象は click、press、fill、fill-secret、capture、ai のステップで、対象がない計画は `ready` になる。
+
+| `status` | ほかのフィールド |
+| --- | --- |
+| `ready` | なし |
+| `not-ready` | `reason`: `grounding-missing`、`grounding-invalid`、`grounding-stale`、`grounding-unreadable` のいずれか |
+| `not-ready` | `reason: 'steps-unresolved'` と、計画の順に並ぶ空でない `steps` 配列 |
+
+`steps` の各項目は `{ id, reason }` である。`reason` は、項目がない `no-entry`、種類や意図が合わない `entry-mismatch`、AI ステップの記録が再生に必要な検証を含まない `trace-uncovered` のいずれかである。
+
+判定は、書き戻しの処理後にファイルを読み直した内容を使う。`not-ready` で、保存すべき変更を書き戻しの許可がないため保存しなかった場合だけ、`unsavedReason: 'write-back-not-allowed'` が付く。書込みの失敗ではこの項目を付けず、ケースのエラーで伝える。
+
+`replayReadiness` はスキーマ上任意である。この項目がない 3.11 以前のレポートも読める。準備状態によってケースの合否や終了コードは変わらない。
 
 ## check の結果 {#check-results}
 
@@ -66,10 +82,13 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 
 | ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile`, `replayReadiness` | — |
+| `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
+
+`replayReadiness` が付くのは `fresh` の行だけである。値は `{ status: 'ready' }` か、`status: 'not-ready'`、`reason: 'steps-unresolved'`、`steps` を持つオブジェクトになる。`steps` の形は [run の結果](#run-results) と同じである。`check` は `unsavedReason` を出さない。`fresh-without-grounding` など、ほかのステータスの行には `replayReadiness` を出さない。
 
 ## heal の結果 {#heal-results}
 
@@ -212,16 +231,16 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 現在のスキーマのバージョンに固定されるのは、書き込み側だけである。ビューアーは、3.x のレポートであれば寛容に読む。次の例は、コマンドごとのエンベロープを 1 つずつ示す。
 
 ```json
-{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換アンカー {#report-persistence}

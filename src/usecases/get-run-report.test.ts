@@ -118,6 +118,21 @@ describe('classifyReport version handling', () => {
     return getRunReport(deps(storage), runId);
   }
 
+  it.each(['3.11', '3.12'])('TEST-READY-5 reads a %s report without interpreting readiness', async schemaVersion => {
+    const base = runEnvelope();
+    for (const replayReadiness of [undefined, { status: 'ready' }, {
+      status: 'not-ready', reason: 'steps-unresolved', steps: [{ id: 'submit', reason: 'no-entry' }],
+      unsavedReason: 'write-back-not-allowed',
+    }]) {
+      const envelope = { ...base, schemaVersion, results: base.results.map(row => ({
+        ...row, ...(replayReadiness === undefined ? {} : { replayReadiness }),
+      })) };
+      const result = await classify(envelope);
+      expect(result).toMatchObject({ kind: 'readable', runId, envelope, schemaVersion });
+      if (result.kind === 'readable') expect(result.envelope).toEqual(envelope);
+    }
+  });
+
   function legacyReport() {
     return {
       schemaVersion: '3.6', command: 'run', startedAt: '2026-09-23T06:40:12Z', durationMs: 42,

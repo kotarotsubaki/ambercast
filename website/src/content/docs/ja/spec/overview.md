@@ -38,7 +38,7 @@ description: "本仕様は、ambercast 0.10.0 が受け付けるアーティフ�
 | 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
 | フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 
 ## 読解順序 {#reading-order}
 

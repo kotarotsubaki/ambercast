@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, test, vi } from 'vitest';
+import { PlanDocument } from '#core/ir/schema.js';
+import { assessReplayReadiness } from '#usecases/replay-readiness.js';
 
 const root = new URL('../../../', import.meta.url);
 
@@ -40,6 +42,17 @@ const pairPresent = (id: string) => planSuffixes.every(suffix => existsSync(new 
 // A case without its generated pair is skipped, except the sign-in smoke whose
 // pair stays required; handwritten IR cannot substitute for generation.
 const skipCase = (id: string) => !pairPresent(id) && (id !== 'memos-sign-in-create-memo' || markedIds.includes(id));
+describe('committed Memos replay readiness', () => {
+  for (const { id } of expectedCases) {
+    it.skipIf(skipCase(id))(`TEST-READY-6 has usable replay entries for ${id}`, () => {
+      const plan = PlanDocument.parse(JSON.parse(fixtureText(`tests/ambercast/${id}.ambercast.plan.json`)));
+      const readiness = assessReplayReadiness(plan, {
+        kind: 'text', text: fixtureText(`tests/ambercast/${id}.ambercast.grounding.json`),
+      });
+      expect(readiness.status, `${id}: ${JSON.stringify(readiness)}`).toBe('ready');
+    });
+  }
+});
 describe('regeneration documentation', () => {
   it('TEST-HARNESS-2 omits the pre-resolve confirms coverage check', () => {
     const paragraphs = readFileSync(new URL('CONTRIBUTING.md', root), 'utf8').split(/\n\s*\n/);

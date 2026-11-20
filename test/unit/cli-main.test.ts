@@ -36,6 +36,67 @@ import { ERROR_DETAILS_KEY_ORDER, main, renderHumanReport, REPORT_PERSISTENCE_FA
 import { ERROR_DETAILS_KEY_ORDER as SHARED_ERROR_DETAILS_KEY_ORDER } from '../../src/core/report-format/error-details.js';
 import { CAUSE_NAMES } from './report/cause-name-fixtures.js';
 
+describe('human replay readiness guidance', () => {
+  const unresolved = { status: 'not-ready', reason: 'steps-unresolved', steps: [{ id: 'submit', reason: 'no-entry' }] } as const;
+  function renderRun(status: 'passed' | 'failed' | 'error', replayReadiness: unknown, file = 'login.test.md') {
+    return renderHumanReport({ ...RUN_ENVELOPE, results: [{
+      id: file, file, planFile: 'login.ambercast.plan.json', status,
+      durationMs: 0, steps: [], sessions: {}, explanation: 'Replay finished.', replayReadiness,
+    }] } as never, false);
+  }
+  function renderCheck(replayReadiness: unknown, file = 'login.test.md', status = 'fresh') {
+    return renderHumanReport({ ...CHECK_ENVELOPE, results: [{
+      id: file, file, planFile: 'login.ambercast.plan.json', status, reason: 'Checked.', replayReadiness,
+    }] } as never, false);
+  }
+
+  it.each(['grounding-missing', 'grounding-invalid', 'grounding-stale', 'grounding-unreadable', 'steps-unresolved'] as const)(
+    'TEST-READY-4 prints exactly one rerun line for a passed run with %s', (reason) => {
+      const readiness = reason === 'steps-unresolved' ? unresolved : { status: 'not-ready', reason };
+      expect(renderRun('passed', readiness)).toBe('passed login.test.md\n  replay: not ready (run "ambercast run --resolve --update-cache login.test.md")\n');
+    },
+  );
+  it.each([
+    { status: 'not-ready', reason: 'grounding-missing' }, unresolved,
+  ])('TEST-READY-4 explains disallowed write-back once for $reason', readiness => {
+    expect(renderRun('passed', { ...readiness, unsavedReason: 'write-back-not-allowed' })).toBe(
+      'passed login.test.md\n  replay: not ready (the grounding was not saved; rerun with --update-cache)\n',
+    );
+  });
+  it.each(['failed', 'error'] as const)('TEST-READY-4 omits guidance for a %s run', status => {
+    for (const readiness of [unresolved, { ...unresolved, unsavedReason: 'write-back-not-allowed' }]) {
+      expect(renderRun(status, readiness)).toBe(`${status} login.test.md\n`);
+    }
+  });
+  it('TEST-READY-4 omits guidance for a passed ready run and legacy results', () => {
+    expect(renderRun('passed', { status: 'ready' })).toBe('passed login.test.md\n');
+    expect(renderRun('passed', undefined)).toBe('passed login.test.md\n');
+  });
+  it.each([
+    [['submit'], '1 step', 'submit'],
+    [['second', 'first', 'last'], '3 steps', 'second, first, last'],
+  ] as const)('TEST-READY-4 prints the exact check count and ordered IDs for %j', (ids, count, joined) => {
+    expect(renderCheck({ ...unresolved, steps: ids.map(id => ({ id, reason: 'no-entry' })) })).toBe(
+      `fresh login.test.md: Checked.\n  replay: not ready (${count} without usable grounding: ${joined}; run "ambercast run --resolve --update-cache login.test.md")\n`,
+    );
+  });
+  it('TEST-READY-4 omits check guidance for ready, legacy and missing-grounding rows', () => {
+    expect(renderCheck({ status: 'ready' })).toBe('fresh login.test.md: Checked.\n');
+    expect(renderCheck(undefined)).toBe('fresh login.test.md: Checked.\n');
+    expect(renderCheck(undefined, 'login.test.md', 'missing-grounding')).toBe('missing-grounding login.test.md: Checked.\n');
+  });
+  it('TEST-READY-4 escapes control characters in filenames and unresolved IDs without adding lines', () => {
+    const file = 'unsafe\n\r\t\u001bname.test.md';
+    const escapedFile = 'unsafe\\n\\r\\t\\u001bname.test.md';
+    expect.soft(renderRun('passed', unresolved, file)).toBe(
+      `passed ${escapedFile}\n  replay: not ready (run "ambercast run --resolve --update-cache ${escapedFile}")\n`,
+    );
+    expect(renderCheck({ ...unresolved, steps: [{ id: 'one\n\u001b', reason: 'no-entry' }, { id: 'two\r\t', reason: 'entry-mismatch' }] }, file)).toBe(
+      `fresh ${escapedFile}: Checked.\n  replay: not ready (2 steps without usable grounding: one\\n\\u001b, two\\r\\t; run "ambercast run --resolve --update-cache ${escapedFile}")\n`,
+    );
+  });
+});
+
 // SPEC-9: the captured v3 fixture still lists target selection for replay commands.
 const expectedUsage = readFileSync(new URL('../fixtures/cli-usage.txt', import.meta.url), 'utf8')
   .replace('  --grep <pattern>  --target <name>  --headed', '  --grep <pattern>  --headed')
@@ -56,7 +117,7 @@ class MemoryWritable extends Writable {
 }
 
 const ENVELOPE = {
-  schemaVersion: '3.11' as const,
+  schemaVersion: '3.12' as const,
   command: 'generate' as const,
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 0,
@@ -66,7 +127,7 @@ const ENVELOPE = {
 };
 
 const RUN_ENVELOPE = {
-  schemaVersion: '3.11' as const,
+  schemaVersion: '3.12' as const,
   command: 'run' as const,
   startedAt: '2026-08-09T00:00:00Z',
   durationMs: 0,
@@ -77,7 +138,7 @@ const RUN_ENVELOPE = {
 };
 
 const CHECK_ENVELOPE = {
-  schemaVersion: '3.11' as const,
+  schemaVersion: '3.12' as const,
   command: 'check' as const,
   startedAt: '2026-08-17T00:00:00Z',
   durationMs: 0,
@@ -102,7 +163,7 @@ const CHECK_ENVELOPE = {
 };
 
 const HEAL_ENVELOPE = {
-  schemaVersion: '3.11' as const,
+  schemaVersion: '3.12' as const,
   command: 'heal' as const,
   startedAt: '2026-08-25T00:00:00Z',
   durationMs: 0,
@@ -271,7 +332,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 3,
       envelope: {
-        schemaVersion: '3.11', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.12', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 },
         errors: [{ scope: 'run', kind: 'environment', code: 'INTERRUPTED', message: 'The command was interrupted before all discovered cases reached a terminal state.' }],
         results: [{ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' }],
@@ -292,7 +353,7 @@ describe('main()', () => {
     runCheckCommand.mockResolvedValue({
       exitCode: 4,
       envelope: {
-        schemaVersion: '3.11', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
+        schemaVersion: '3.12', command: 'check', startedAt: '2026-08-17T00:00:00Z', durationMs: 0,
         summary: { total: 1, passed: 0, failed: 1, errored: 0, skipped: 0 }, errors: [],
         results: [{ id: 'deleted.test.md', file: 'deleted.test.md', planFile: 'deleted.ambercast.plan.json', groundingFile: artifactPath, status: 'orphaned-grounding', reason: 'No corresponding test file exists for this grounding artifact.' }],
       },

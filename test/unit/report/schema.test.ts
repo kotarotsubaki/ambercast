@@ -29,7 +29,9 @@ import {
   SecretConsentRequiredDetails,
   SecretEnvVarCollisionDetails,
   SecretSyntaxRejectedDetails,
+  ReplayReadiness,
 } from '../../../src/report/schema.js';
+import { writeGeneratedArtifacts } from '../../../src/build-tools/generate-json-schema.js';
 import { CAUSE_NAMES } from './cause-name-fixtures.js';
 
 interface SchemaUnderTest {
@@ -104,6 +106,87 @@ const CHECK_RESULT = {
   status: 'fresh',
   reason: 'The generated inputs digest is current.',
 };
+
+describe('replay readiness report compatibility', () => {
+  it('TEST-READY-5 accepts run and check rows with the 3.12 field set', () => {
+    expect(RunResult.parse(RUN_RESULT)).toEqual(RUN_RESULT);
+    expect(CheckResult.parse(CHECK_RESULT)).toEqual(CHECK_RESULT);
+  });
+  const unresolved = {
+    status: 'not-ready', reason: 'steps-unresolved',
+    steps: [{ id: 'submit', reason: 'no-entry' }, { id: 'fill', reason: 'entry-mismatch' }, { id: 'assistant', reason: 'trace-uncovered' }],
+  };
+  it.each([
+    { status: 'not-ready', reason: 'grounding-missing' },
+    { status: 'not-ready', reason: 'grounding-invalid' },
+    { status: 'not-ready', reason: 'grounding-stale' },
+    { status: 'not-ready', reason: 'grounding-unreadable' },
+    unresolved,
+  ])('TEST-READY-5 accepts $reason with and without the run-only unsaved reason', readiness => {
+    for (const replayReadiness of [readiness, { ...readiness, unsavedReason: 'write-back-not-allowed' }]) {
+      expect(ReplayReadiness.parse(replayReadiness)).toEqual(replayReadiness);
+      expect(RunResult.parse({ ...RUN_RESULT, replayReadiness })).toEqual({ ...RUN_RESULT, replayReadiness });
+    }
+  });
+  it('TEST-READY-5 accepts ready on both commands and unresolved check rows without a run-only restriction', () => {
+    for (const schema of [RunResult, CheckResult]) {
+      const base = schema === RunResult ? RUN_RESULT : CHECK_RESULT;
+      expect(schema.parse({ ...base, replayReadiness: { status: 'ready' } })).toEqual({ ...base, replayReadiness: { status: 'ready' } });
+    }
+    expect(CheckResult.parse({ ...CHECK_RESULT, replayReadiness: unresolved })).toEqual({ ...CHECK_RESULT, replayReadiness: unresolved });
+    expectRejected(CheckResult, { ...CHECK_RESULT, replayReadiness: { ...unresolved, unsavedReason: 'write-back-not-allowed' } });
+    expectRejected(CheckResult, { ...CHECK_RESULT, replayReadiness: { status: 'not-ready', reason: 'grounding-missing' } });
+  });
+  it.each([
+    { status: 'ready', unsavedReason: 'write-back-not-allowed' },
+    { status: 'ready', reason: 'steps-unresolved' },
+    { status: 'not-ready', reason: 'steps-unresolved', steps: [] },
+    { ...unresolved, steps: [{ id: 'submit', reason: 'unknown' }] },
+    { ...unresolved, steps: [{ id: 1, reason: 'no-entry' }] },
+    { ...unresolved, steps: [{ id: 'submit', reason: 'no-entry', extra: true }] },
+    { ...unresolved, unsavedReason: 'write-failed' },
+    { status: 'not-ready', reason: 'unknown' },
+    { status: 'not-ready', reason: 'grounding-missing', steps: [] },
+  ])('TEST-READY-5 rejects malformed or contradictory readiness %j', replayReadiness => {
+    expectRejected(ReplayReadiness, replayReadiness);
+    expectRejected(RunResult, { ...RUN_RESULT, replayReadiness });
+  });
+  it('TEST-READY-5 publishes report 3.12 while plan and grounding versions stay fixed', () => {
+    expect.soft(REPORT_SCHEMA_VERSION).toBe('3.12');
+    expect(PLAN_SCHEMA_VERSION).toBe(5);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
+  });
+  it('TEST-READY-5 generates JSON Schema accepting 3.12 reports', () => {
+    const writes = new Map<string, string>();
+    writeGeneratedArtifacts({ outDir: '/dist-output', writeFile: (path, content) => { writes.set(path, content); } });
+    const schema = JSON.parse(writes.get('/dist-output/schema/report.schema.json')!) as { oneOf: { properties: { schemaVersion: { const: string } } }[] };
+    expect(schema.oneOf).toHaveLength(5);
+    expect(schema.oneOf.map(branch => branch.properties.schemaVersion.const)).toEqual(Array(5).fill('3.12'));
+  });
+  it('TEST-READY-5 generates capabilities with report 3.12 and unchanged plan and grounding versions', () => {
+    const writes = new Map<string, string>();
+    writeGeneratedArtifacts({ outDir: '/dist-output', writeFile: (path, content) => { writes.set(path, content); } });
+    const capabilities = JSON.parse(writes.get('/dist-output/manifest/capabilities.json')!);
+    expect(capabilities.schemaVersions).toEqual({ plan: 5, grounding: 4, report: '3.12' });
+  });
+  it.each([
+    ['capabilities.json', 'schemaVersions'], ['docs-v4-expectations.json', 'versions'],
+  ])('TEST-READY-5 pins report 3.12 in %s', (file, key) => {
+    const fixture = JSON.parse(readFileSync(new URL(`../../fixtures/${file}`, import.meta.url), 'utf8'));
+    expect.soft(fixture[key].report).toBe('3.12');
+    expect(fixture[key].plan).toBe(file === 'capabilities.json' ? 5 : '5');
+    expect(fixture[key].grounding).toBe(file === 'capabilities.json' ? 4 : '4');
+  });
+  it('TEST-READY-5 retains generator-assumption warnings only on healed rows', () => {
+    const warnings = [{ kind: 'generator-assumption', message: 'The account already exists.' }];
+    expect(HealResult.parse({ ...HEAL_RESULT, warnings })).toEqual({ ...HEAL_RESULT, warnings });
+    expect(HealResult.parse({ ...HEAL_RESULT, warnings: [] })).toEqual({ ...HEAL_RESULT, warnings: [] });
+    expectRejected(HealResult, { ...HEAL_RESULT, warnings: [{ kind: 'generator-assumption', message: '' }] });
+    expectRejected(HealResult, { ...HEAL_RESULT, warnings: [{ kind: 'other', message: 'An assumption.' }] });
+    expectRejected(HealResult, { ...HEAL_RESULT, repairOutcome: 'partially-healed', warnings });
+    expectRejected(HealResult, { ...HEAL_RESULT, replayReadiness: { status: 'ready' } });
+  });
+});
 const REVIEW_CONCERN = {
   stepId: 'assert-welcome',
   concern: 'The assertion is too broad.',
@@ -135,10 +218,10 @@ const CASE_FS_IO_ERROR = {
 describe('TEST-5 generator assumption report contract (SPEC-5)', () => {
   const warning = { kind: 'generator-assumption', message: 'A' };
 
-  it('pins report 3.11 at the documented source line 58', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+  it('pins report 3.12 at the documented source line 58', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
     const source = readFileSync(new URL('../../../src/report/schema.ts', import.meta.url), 'utf8');
-    expect(source.split('\n')[57]).toBe("export const REPORT_SCHEMA_VERSION = '3.11' as const;");
+    expect(source.split('\n')[57]).toBe("export const REPORT_SCHEMA_VERSION = '3.12' as const;");
   });
 
   it.each([
@@ -181,7 +264,7 @@ describe('TEST-5 generator assumption report contract (SPEC-5)', () => {
   });
 });
 
-describe('TEST-20 report schema 3.11', () => {
+describe('TEST-20 report schema 3.12', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -205,9 +288,9 @@ describe('TEST-20 report schema 3.11', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.11', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.11' }));
+  it('pins the shared report version to 3.12', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.12' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
@@ -215,7 +298,7 @@ describe('TEST-20 report schema 3.11', () => {
 
 describe('TEST-V1 report-only version change', () => {
   it('pins Plan and Grounding schema versions while preserving the producer contract', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
     expect(GROUNDING_SCHEMA_VERSION).toBe(4);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
@@ -250,7 +333,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.11',
+    schemaVersion: '3.12',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -481,11 +564,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.11', () => {
+  it('requires schema version 3.12', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.11' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.12' });
   });
 });
 
@@ -493,8 +576,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.11', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+  it('exports schema version 3.12', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -1045,7 +1128,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
   });
 
   it.each(generateBranches)(

@@ -428,8 +428,8 @@ describe('TEST-R11 report and event vocabulary', () => {
   const stepEvents = (events: ReturnType<typeof createRecordingEventSink>) =>
     events.emitted().filter((event): event is Extract<RunEvent, { type: 'step-result' }> => event.type === 'step-result');
 
-  it('accepts report 3.11 bindings and all four new unresolved reasons', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+  it('accepts report 3.12 bindings and all four new unresolved reasons', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
     expect(StepResult.parse({
       id: 'click-submit', type: 'action', target: 'web', status: 'passed',
       binding: { provenance: 'grounding', confirmed: true },
@@ -442,7 +442,7 @@ describe('TEST-R11 report and event vocabulary', () => {
   it('advances grounding to v4 while preserving plan and report versions', () => {
     expect(PLAN_SCHEMA_VERSION).toBe(5);
     expect(GROUNDING_SCHEMA_VERSION).toBe(4);
-    expect(REPORT_SCHEMA_VERSION).toBe('3.11');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
   });
 
   it.each(['no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed'] as const)(

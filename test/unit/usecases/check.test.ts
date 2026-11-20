@@ -7,7 +7,7 @@ import { promptTemplateFingerprint } from '#core/ai/prompt-envelope.js';
 import * as planInputProvenance from '#core/ai/plan-input-provenance.js';
 import { PromptPathInvalidError } from '#core/errors/prompt-path-invalid-error.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
-import { computeInputsDigest, computePlanDigest } from '#core/ir/digest.js';
+import { computeInputsDigest, computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
 import { planProducerBundleFingerprint } from '#core/ai/plan-producer-bundle.js';
 import { normalizeTestMd } from '#core/ir/normalize.js';
 import {
@@ -23,6 +23,10 @@ import { check, type CheckDeps, type CheckOptions } from '#usecases/check.js';
 import { BatchInterruptionTracker } from '#usecases/batch-interruption.js';
 import { buildCheckReport } from '#usecases/check-report.js';
 import { createInMemoryStorage } from '../../doubles/create-in-memory-storage.js';
+import { run } from '#usecases/run.js';
+import { buildRunReport } from '#usecases/run-report.js';
+import { createScenario as createRunScenario, DEFAULT_OPTIONS as RUN_OPTIONS } from '../../support/run-scenario.js';
+import { assertDiagnosable, assertZeroAiCalls } from '../../support/report-assertions.js';
 
 const TEST_DIR = '/workspace/tests';
 const RUNS_DIR = '/workspace/tests/.runs';
@@ -30,6 +34,110 @@ const PROMPT = '# Sign in\n\nWhen I submit valid credentials, I reach the dashbo
 const TARGETS = { web: { surface: 'web', baseUrl: 'https://example.test' } } as const;
 const RESOLVED_TARGETS = { web: { ...TARGETS.web, executor: { kind: 'playwright', browser: 'chromium' }, healReplayIsolation: 'stateful' as const, resolveTimeoutMs: 5000 } } as const;
 const OPTIONS: CheckOptions = { files: [], allowEmpty: false, list: false };
+
+describe('check replay readiness', () => {
+  const intent = { description: 'Submit', roleHint: 'button', sourceSpan: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 7 } };
+  const element = {
+    kind: 'element' as const,
+    locator: { strategy: 'accessibility' as const, role: 'button', name: 'Submit' },
+    fingerprint: { algorithm: 'a11y-neighborhood-v2' as const, hash: 'a'.repeat(64) },
+    provenance: 'quoted-match' as const,
+  };
+
+  it.each(['covered', 'absent', 'wrong intent', 'fill wrong intent', 'capture wrong intent', 'wrong kind', 'ai wrong kind', 'capture absent', 'ai absent', 'covered trace', 'legacy trace', 'no entry steps', 'multiple absent'] as const)(
+    'TEST-READY-3 agrees with run for valid grounding: %s', async (kind) => {
+      const { storage, layout, deps } = createScenario();
+      const file = `${TEST_DIR}/readiness.test.md`;
+      await storage.writeText(file, PROMPT);
+      const action = { id: 'submit', kind: 'action', target: 'web', action: 'click', intent } as const;
+      const capture = { id: 'capture', kind: 'capture', target: 'web', intent, variable: 'captured' } as const;
+      const ai = { id: 'assistant', kind: 'ai', target: 'web', instruction: 'Reach the dashboard.', instructionCoverage: [{ id: 'dashboard', kind: 'success', sourceSpan: intent.sourceSpan }] } as const;
+      const steps = kind === 'no entry steps' ? [...freshPlan().steps, { id: 'heading', kind: 'assert', target: 'web', check: 'text-visible', text: 'Dashboard' }]
+        : kind === 'capture absent' || kind === 'capture wrong intent' ? [capture]
+        : kind === 'fill wrong intent' ? [{ ...action, action: 'fill', value: 'sample' }]
+        : kind === 'ai absent' || kind === 'legacy trace' || kind === 'covered trace' || kind === 'ai wrong kind' ? [ai]
+        : kind === 'multiple absent' ? [action, { ...action, id: 'second' }] : [action];
+      const plan = { ...freshPlan(), steps } as unknown as PlanDocument;
+      await writePlan(storage, layout, file, plan);
+      const entries: GroundingDocument['entries'] = kind === 'covered' || kind === 'wrong intent'
+        ? { submit: { ...element, intentDigest: kind === 'covered' ? computeIntentDigest({ stepKind: 'action', operation: 'click', intent }) : 'b'.repeat(64) } }
+        : kind === 'fill wrong intent' ? { submit: { ...element, intentDigest: 'b'.repeat(64) } }
+        : kind === 'capture wrong intent' ? { capture: { ...element, intentDigest: 'b'.repeat(64) } }
+        : kind === 'ai wrong kind' ? { assistant: { ...element, intentDigest: 'b'.repeat(64) } }
+        : kind === 'covered trace' ? { assistant: { kind: 'ai', trace: { events: [], verification: [{ type: 'assert', check: 'text-visible', text: 'Dashboard' }], verificationCoverage: { dashboard: 0 } } } }
+        : kind === 'wrong kind' ? { submit: { kind: 'ai', trace: { events: [], verification: [{ type: 'assert', check: 'text-visible', text: 'Dashboard' }] } } }
+        : kind === 'legacy trace' ? { assistant: { kind: 'ai', trace: { events: [], verification: [{ type: 'assert', check: 'text-visible', text: 'Dashboard' }] } } } : {};
+      await writeGrounding(storage, layout, file, plan, entries);
+      const expected = kind === 'covered' || kind === 'covered trace' || kind === 'no entry steps' ? { status: 'ready' }
+        : { status: 'not-ready', reason: 'steps-unresolved', steps: kind === 'multiple absent'
+          ? [{ id: 'submit', reason: 'no-entry' }, { id: 'second', reason: 'no-entry' }]
+          : [{ id: kind.startsWith('capture') ? 'capture' : kind.startsWith('ai') || kind === 'legacy trace' ? 'assistant' : 'submit',
+            reason: kind.includes('wrong') ? 'entry-mismatch' : kind === 'legacy trace' ? 'trace-uncovered' : 'no-entry' }] };
+      const outcome = await check(deps, { ...OPTIONS, files: [file] });
+      const report = buildCheckReport({ startedAt: '2026-11-20T00:00:00Z', durationMs: 0, options: OPTIONS, outcome });
+      assertDiagnosable(report.envelope);
+      expect(report.exitCode).toBe(0);
+      expect(outcome.errors).toEqual([]);
+      expect(outcome.results[0]).toMatchObject({ status: 'fresh', reason: 'The plan matches the current prompt and target.' });
+      const replay = createRunScenario({ storage, layout });
+      const executed = await run(replay.deps, { ...RUN_OPTIONS, files: [file], resolve: false });
+      const runReport = buildRunReport({ startedAt: '2026-11-20T00:00:00Z', durationMs: 0, options: RUN_OPTIONS, outcome: executed });
+      assertDiagnosable(runReport.envelope);
+      assertZeroAiCalls(runReport.envelope);
+      const readiness = executed.results[0]?.result.replayReadiness;
+      const runReadiness = readiness === undefined ? undefined : Object.fromEntries(Object.entries(readiness).filter(([key]) => key !== 'unsavedReason'));
+      expect.soft(outcome.results[0]).toHaveProperty('replayReadiness', expected);
+      expect.soft(runReadiness).toEqual(expected);
+      expect(outcome.results[0]).toHaveProperty('replayReadiness', runReadiness);
+      const checked = outcome.results[0];
+      if (checked && 'replayReadiness' in checked) expect(checked.replayReadiness).not.toHaveProperty('unsavedReason');
+    },
+  );
+
+  it.each([
+    ['missing', 'missing-grounding', 'The grounding cache does not exist.', 4],
+    ['invalid', 'invalid-grounding', 'The grounding cache is not valid or does not match the grounding schema.', 4],
+    ['digest', 'stale-grounding', 'The grounding cache does not match the current plan.', 4],
+    ['stale plan', 'stale', 'The plan is stale for the current prompt or target.', 4],
+    ['optional', 'fresh-without-grounding', "The plan is fresh; a grounding cache is not required by this project's repository policy.", 0],
+  ] as const)('TEST-READY-3 keeps %s status, reason and exit code without readiness', async (kind, status, reason, exitCode) => {
+    const { storage, layout, deps } = createScenario(kind === 'optional' ? {
+      config: createConfig({ grounding: { repositoryPolicy: 'uncommitted', localWriteBack: 'auto' } }),
+    } : {});
+    const file = `${TEST_DIR}/not-fresh.test.md`;
+    await storage.writeText(file, PROMPT);
+    const plan = await writePlan(storage, layout, file, freshPlan(kind === 'stale plan' ? `${PROMPT}\nChanged intent.\n` : PROMPT));
+    if (kind === 'invalid') await storage.writeText(layout.groundingPathFor(file), '{invalid');
+    if (kind === 'digest') await writeGrounding(storage, layout, file, plan, {}, 'b'.repeat(64));
+    const outcome = await check(deps, { ...OPTIONS, files: [file] });
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.results[0]).toMatchObject({ status, reason });
+    expect(outcome.results[0]).not.toHaveProperty('replayReadiness');
+    const report = buildCheckReport({ startedAt: '2026-11-20T00:00:00Z', durationMs: 0, options: OPTIONS, outcome });
+    assertDiagnosable(report.envelope);
+    expect(report.exitCode).toBe(exitCode);
+  });
+
+  it('TEST-READY-3 keeps grounding I/O errors file-scoped and continues to a ready row', async () => {
+    const { storage, layout, deps } = createScenario();
+    const files = [`${TEST_DIR}/broken.test.md`, `${TEST_DIR}/good.test.md`];
+    for (const file of files) {
+      await storage.writeText(file, PROMPT);
+      await writeGrounding(storage, layout, file, await writePlan(storage, layout, file));
+    }
+    const outcome = await check({ ...deps, storage: { ...storage, readText: async path => {
+      if (path === layout.groundingPathFor(files[0]!)) throw new Error('grounding permission denied');
+      return storage.readText(path);
+    } } }, { ...OPTIONS, files });
+    expect(outcome.errors).toEqual([expect.objectContaining({ file: files[0], error: expect.objectContaining({ kind: 'fs-io-error' }) })]);
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.results[0]).toMatchObject({ id: files[1], status: 'fresh' });
+    const report = buildCheckReport({ startedAt: '2026-11-20T00:00:00Z', durationMs: 0, options: OPTIONS, outcome });
+    assertDiagnosable(report.envelope);
+    expect(report.exitCode).toBe(3);
+    expect(outcome.results[0]).toHaveProperty('replayReadiness', { status: 'ready' });
+  });
+});
 
 type TestConfig = CheckDeps['config'];
 

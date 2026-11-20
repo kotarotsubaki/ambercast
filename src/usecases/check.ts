@@ -32,7 +32,8 @@ import type {
 } from './instruction-coverage-policy.js';
 import { validateCommittedInstructionCoverage } from './instruction-coverage-policy.js';
 import { BatchInterruptionTracker } from './batch-interruption.js';
-import { inspectGroundingArtifact } from './check-grounding.js';
+import { inspectGroundingArtifactText } from './check-grounding.js';
+import { assessReplayReadiness } from './replay-readiness.js';
 import { validateCommittedElementIntent, type ElementIntentIssue, type ElementIntentResult } from './element-intent-policy.js';
 import { isRetiredPlanVersion } from './run.js';
 import { assertPromptPathsEligible } from './prompt-path-eligibility.js';
@@ -464,6 +465,11 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
       }).inputsDigest;
       if (parsedPlan.data.source.inputsDigest === inputsDigest) {
         /*
+         * Classification and readiness share one artifact snapshot so concurrent
+         * file changes cannot make their conclusions disagree. Readiness adds
+         * coverage evidence only to fresh rows; lifecycle statuses and I/O
+         * errors retain their established meaning.
+         *
          * Grounding is inspected only after the plan has passed its own
          * freshness contract, so an already stale or invalid plan keeps its
          * established outcome. The mapping replaces this file's deferred fresh
@@ -485,12 +491,14 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
          */
         const groundingPath = deps.layout.groundingPathFor(file);
         let groundingInspection;
+        let groundingText: string | undefined;
         try {
-          groundingInspection = await inspectGroundingArtifact(
-            deps.storage,
-            groundingPath,
-            parsedPlan.data,
-          );
+          if (await deps.storage.exists(groundingPath)) {
+            groundingText = await deps.storage.readText(groundingPath);
+            groundingInspection = inspectGroundingArtifactText(groundingText, parsedPlan.data);
+          } else {
+            groundingInspection = { kind: 'missing' } as const;
+          }
         } catch (error) {
           errors.push({
             file,
@@ -529,6 +537,18 @@ export async function check(deps: CheckDeps, options: CheckOptions): Promise<Che
           }
           continue;
         }
+        const replayReadiness = assessReplayReadiness(parsedPlan.data, { kind: 'text', text: groundingText! });
+        results.push({
+          ...identity,
+          status: 'fresh',
+          reason: 'The plan matches the current prompt and target.',
+          ...(replayReadiness.status === 'ready'
+            ? { replayReadiness }
+            : replayReadiness.reason === 'steps-unresolved'
+              ? { replayReadiness: { ...replayReadiness, steps: [...replayReadiness.steps] } }
+              : {}),
+        });
+        continue;
       }
       results.push({
         ...identity,

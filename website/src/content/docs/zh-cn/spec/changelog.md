@@ -7,6 +7,7 @@ description: "产物版本的接受必须 (MUST) 遵循 Ambercast 执行计划�
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
 | 用例的所有步骤都通过后，click、press、fill、fill-secret 和 capture 的定位缓存条目也会在允许回写时保存。定位缓存格式不变。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 无需迁移。 |
 | provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
 | report 3.10 → 3.11 新增 `generator-assumption` 警告。Stage 3 接受的假设仅出现在 `healed` 行的可选 `warnings` 中。假设不会阻止 generate 或 heal。单目标响应的歧义变为可重试的 `AI_RESPONSE_INVALID`，退出码为 3。多目标分配未确定时仍为 `PROMPT_AMBIGUOUS`，退出码为 2。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 验证封闭 union 的使用者必须 (MUST) 使用 3.11 Schema。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |

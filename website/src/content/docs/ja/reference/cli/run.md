@@ -55,4 +55,18 @@ description: ambercast run コマンドのフラグ、再生パス、明示的�
 
 実行結果ステータスは `passed`・`failed`・`error`・`listed`・`skipped` のいずれかであり、プロセス終了コードの値と優先順位は [終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority) が定める。
 
+ケースが `passed` で `replayReadiness.status` が `not-ready` の場合、人向けの出力は結果の下に次の 1 行を表示する。
+
+```text
+  replay: not ready (run "ambercast run --resolve --update-cache <file>")
+```
+
+書き戻しの許可がなく変更を保存しなかった場合は、代わりに次の行を表示する。
+
+```text
+  replay: not ready (the grounding was not saved; rerun with --update-cache)
+```
+
+`<file>` は対象のプロンプトのパスである。`failed` と `error` のケースにはこの行を表示しない。JSON では、計画を得た後の失敗したケースにも任意の `replayReadiness` が付く。準備状態は終了コードを変えない。[レポート](/ambercast/ja/reference/reports/#run-results) が値と判定の範囲を定義する。
+
 関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#run-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)、[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)

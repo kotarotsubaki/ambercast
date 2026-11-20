@@ -296,6 +296,18 @@ export function renderHumanReport(
         }
       }
     }
+    const readiness = item.replayReadiness as {
+      status?: string; reason?: string; unsavedReason?: string; steps?: readonly { id: string }[];
+    } | undefined;
+    const file = escapeControlChars(String(item.file ?? item.id ?? ''));
+    if (report.command === 'run' && status === 'passed' && readiness?.status === 'not-ready') {
+      resultLines.push(readiness.unsavedReason
+        ? '  replay: not ready (the grounding was not saved; rerun with --update-cache)'
+        : `  replay: not ready (run "ambercast run --resolve --update-cache ${file}")`);
+    } else if (report.command === 'check' && status === 'fresh' && readiness?.reason === 'steps-unresolved') {
+      const steps = readiness.steps!;
+      resultLines.push(`  replay: not ready (${steps.length} ${steps.length === 1 ? 'step' : 'steps'} without usable grounding: ${steps.map(step => escapeControlChars(step.id)).join(', ')}; run "ambercast run --resolve --update-cache ${file}")`);
+    }
     return item.stage3Rejection?.reason === 'secret-set-changed'
       ? [...resultLines, `  hint: 秘匿値の構成が変わった。ambercast generate --force ${escapeControlChars(String(item.file ?? item.id ?? ''))} で再生成し同意を取り直す`]
       : resultLines;

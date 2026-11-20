@@ -38,6 +38,22 @@ function healSummary(repairOutcome: 'healed' | 'partially-healed' | 'unresolved'
 
 describe('summarizeReport', () => {
   it.each([
+    ['run', 'passed', 'passed'], ['run', 'failed', 'failed'], ['run', 'error', 'errored'],
+    ['check', 'fresh', 'passed'],
+  ] as const)('TEST-READY-5 ignores readiness for %s/%s', (command, status, classification) => {
+    const result = { id: 'case', file: 'case.test.md', planFile: 'case.ambercast.plan.json', status,
+      reason: 'Checked.', durationMs: 0, steps: [], sessions: {}, explanation: 'Completed.' };
+    const input = { command, results: [result], errors: [] } as unknown as ReportSummaryInput;
+    const expected = { total: 1, passed: Number(classification === 'passed'), failed: Number(classification === 'failed'), errored: Number(classification === 'errored'), skipped: 0 };
+    expect(summarizeReport(input)).toEqual(expected);
+    for (const replayReadiness of [
+      { status: 'ready' },
+      { status: 'not-ready', reason: 'steps-unresolved', steps: [{ id: 'submit', reason: 'no-entry' }] },
+    ]) {
+      expect(summarizeReport({ ...input, results: [{ ...result, replayReadiness }] } as unknown as ReportSummaryInput)).toEqual(expected);
+    }
+  });
+  it.each([
     ['generate', {
       id: 'generate-case', file: 'generate-case.test.md', planFile: 'generate-case.ambercast.plan.json',
       status: 'generated', dryRun: false, ambiguities: [], durationMs: 0, aiCalls: 0,

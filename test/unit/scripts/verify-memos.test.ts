@@ -254,9 +254,10 @@ describe('confirms regeneration gates', () => {
             intent: { description: 'Open memo', roleHint: 'button', sourceSpan: fakeSourceSpan } },
         ] }));
       }
-      if (call.kind === 'resolve' && !confirmed) {
+      if (call.kind === 'resolve') {
         const envelope = JSON.parse(success.stdout);
-        envelope.results[0].steps = [{ id: 'uncovered', status: 'passed', binding: { provenance: 'ai-proposed', confirmed: false } }];
+        // The confirmed case must reach replay, so rejecting every AI-proposed binding would fail this test.
+        envelope.results[0].steps = [{ id: 'uncovered', status: 'passed', binding: { provenance: 'ai-proposed', confirmed } }];
         return result(0, JSON.stringify(envelope));
       }
       return success;

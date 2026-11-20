@@ -52,10 +52,10 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * Version 3.11 adds generator-assumption warnings to generation results and
- * healed results; consumers validating a closed warning union must accept them.
+ * Version 3.12 adds optional replay readiness and execution diagnostics while
+ * retaining compatibility with results that omit the new fields.
  */
-export const REPORT_SCHEMA_VERSION = '3.11' as const;
+export const REPORT_SCHEMA_VERSION = '3.12' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -607,6 +607,43 @@ export const SessionResult = z.strictObject({
   state: z.enum(['not-opened', 'closed', 'close-failed']),
 });
 
+/** Stored entry coverage shared by run and check; ready makes no live-screen promise. */
+const ReadyReplayReadiness = z.strictObject({ status: z.literal('ready') });
+
+/** Per-step evidence remains nonempty and ordered so every unresolved entry is diagnosable. */
+const UnresolvedReplayReadinessFields = {
+  status: z.literal('not-ready'),
+  reason: z.literal('steps-unresolved'),
+  steps: z.array(z.strictObject({
+    id: z.string(),
+    reason: z.enum(['no-entry', 'entry-mismatch', 'trace-uncovered']),
+  })).nonempty(),
+};
+
+/**
+ * Validates run readiness, including write-back restrictions only on not-ready results.
+ * A restriction explains disallowed persistence of pending changes; scan or
+ * write failures are explained by the case error instead.
+ */
+export const ReplayReadiness = z.union([
+  ReadyReplayReadiness,
+  z.strictObject({
+    status: z.literal('not-ready'),
+    reason: z.enum(['grounding-missing', 'grounding-invalid', 'grounding-stale', 'grounding-unreadable']),
+    unsavedReason: z.literal('write-back-not-allowed').optional(),
+  }),
+  z.strictObject({
+    ...UnresolvedReplayReadinessFields,
+    unsavedReason: z.literal('write-back-not-allowed').optional(),
+  }),
+]);
+
+/** Check assesses valid grounding, so artifact failures and run-only restrictions are excluded. */
+const CheckReplayReadiness = z.union([
+  ReadyReplayReadiness,
+  z.strictObject(UnresolvedReplayReadinessFields),
+]);
+
 const ExecutedResultFields = {
   durationMs: NonNegativeInteger,
   // The dispatch boundary increments this independently of events so
@@ -655,6 +692,8 @@ export const ExecutedRunResult = z.strictObject({
   ...ResultIdentityFields,
   status: z.enum(['passed', 'failed', 'error']),
   ...ExecutedResultFields,
+  /** Optional for older reports; kept outside shared execution fields so heal rows never inherit it. */
+  replayReadiness: ReplayReadiness.optional(),
 });
 
 /**
@@ -1114,6 +1153,8 @@ const CompletedCheckResult = z.strictObject({
   reason: z.string(),
   groundingFile: NonWhitespaceString.optional(),
   artifactFile: NonWhitespaceString.optional(),
+  /** Emitted only for fresh rows; the schema keeps it optional so older reports remain readable. */
+  replayReadiness: CheckReplayReadiness.optional(),
 });
 
 /**

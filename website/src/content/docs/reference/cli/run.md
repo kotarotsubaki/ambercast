@@ -55,4 +55,18 @@ Only `run` attempts report persistence (`reportPersistence`) at `<runsDir>/<runI
 
 Run result statuses are `passed`, `failed`, `error`, `listed`, and `skipped`; process-code values and their priority are owned by [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
 
+When a case is `passed` and `replayReadiness.status` is `not-ready`, human output prints one line below the result:
+
+```text
+  replay: not ready (run "ambercast run --resolve --update-cache <file>")
+```
+
+If write-back permission prevented saving changes, it prints this line instead:
+
+```text
+  replay: not ready (the grounding was not saved; rerun with --update-cache)
+```
+
+`<file>` is the prompt path. Cases with `failed` or `error` status do not print this line. In JSON, failed cases that obtained a plan also carry the optional `replayReadiness`. Readiness does not change exit codes. [Reports](/ambercast/reference/reports/#run-results) defines the values and assessment limits.
+
 Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#run-results), [File layout](/ambercast/reference/file-layout/#run-artifacts), [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).

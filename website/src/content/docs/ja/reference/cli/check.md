@@ -41,6 +41,16 @@ description: 計画とグラウンディングの鮮度を調べる ambercast ch
 
 完了した検出結果は `id`・`file`・`planFile`・`status`・`reason` を持つ。`groundingFile` と `artifactFile` は、検出の根拠になるときだけ現れる。ステータスが `invalid-artifact-name` の検出結果だけは例外で、`planFile` を持たない。`id`・`file`・`status`・`reason` と `artifactFile` を持ち、このうち `id`・`file`・`artifactFile` が成果物自身を指す。フィールドの定義とレポートの構造は[レポート](/ambercast/ja/reference/reports/#check-results)にある。
 
+`fresh` の行には、任意の `replayReadiness` が付く。値は `ready` か、理由が `steps-unresolved` の `not-ready` である。ほかのステータスの行には付かない。準備状態は行の `status`、`reason`、終了コードを変えない。
+
+理由が `steps-unresolved` の場合、人向けの出力は結果の下に次の 1 行を表示する。
+
+```text
+  replay: not ready (<n> steps without usable grounding: <ids>; run "ambercast run --resolve --update-cache <file>")
+```
+
+`<n>` は対象ステップの数、`<ids>` はその ID を `, ` でつないだ文字列である。1 件の場合は `1 step` と表示する。`<file>` は対象のプロンプトのパスである。
+
 ## 読み取り専用の検査 {#read-only-contract}
 
 `check` は読み取り専用である。依存には AI ランタイム、ブラウザドライバー、イベント送信、書き込みストレージを含まない。実行時には、読み取り専用のストレージ、ファイルレイアウトの規則（[ファイルレイアウト](/ambercast/ja/reference/file-layout/#companions)を参照する）、探索（[設定](/ambercast/ja/reference/configuration/#file-selection)を参照する）を組み合わせる。

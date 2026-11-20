@@ -76,31 +76,31 @@ describe('TEST-11 generator assumption documentation (SPEC-11)', () => {
     expect(exit).not.toContain('regardless of `--strict`');
   });
 
-  it.each(locales)('documents report 3.11 in the reports contract and examples for locale %s', (locale) => {
+  it.each(locales)('documents report 3.12 in the reports contract and examples for locale %s', (locale) => {
     const document = reference(locale, 'reports');
     const envelope = section(document, 'envelope');
     expect(envelope).toContain('schemaVersion');
-    expect(envelope).toContain('3.11');
+    expect(envelope).toContain('3.12');
     expect(envelope).not.toContain('3.10');
     const examples = [...document.matchAll(/"schemaVersion"\s*:\s*"([^"]+)"/g)];
     expect(examples.length).toBeGreaterThan(0);
-    for (const example of examples) expect(example[1]).toBe('3.11');
+    for (const example of examples) expect(example[1]).toBe('3.12');
   });
 
   for (const anchor of ['publication-metadata', 'generated-artifacts', 'report-schema']) {
-    it.each(locales)(`documents report 3.11 at json-schemas ${anchor} for locale %s`, (locale) => {
+    it.each(locales)(`documents report 3.12 at json-schemas ${anchor} for locale %s`, (locale) => {
       const content = section(reference(locale, 'json-schemas'), anchor);
       const report = anchor === 'publication-metadata' ? row(content, 'report')
         : anchor === 'generated-artifacts' ? row(content, '`report.schema.json`') : content;
       expect(report).toContain('schemaVersion');
-      expect(report).toContain('3.11');
+      expect(report).toContain('3.12');
       expect(report).not.toContain('3.10');
     });
   }
 
-  it.each(locales)('accepts report schemaVersion 3.11 in the spec overview table for locale %s', (locale) => {
+  it.each(locales)('accepts report schemaVersion 3.12 in the spec overview table for locale %s', (locale) => {
     const report = row(section(spec(locale, 'overview'), 'compatibility'), 'Report `schemaVersion`');
-    expect(report.split('|')[2]!.trim()).toBe('`3.11`');
+    expect(report.split('|')[2]!.trim()).toBe('`3.12`');
   });
 
   it('includes inline-code generator-assumption guidance in the official skill', () => {

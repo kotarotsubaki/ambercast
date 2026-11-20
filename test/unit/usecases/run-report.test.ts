@@ -18,12 +18,41 @@ import { reportError } from '#report/error-mapping.js';
 import type { ExecutedRunResult } from '#report/schema.js';
 import { buildRunReport, type RunReportInput } from '#usecases/run-report.js';
 import type { RunCaseOutcome, RunOutcome } from '#usecases/run.js';
+import { assertDiagnosable, assertZeroAiCalls } from '../../support/report-assertions.js';
 
 const BASE = {
   startedAt: '2026-08-08T00:00:00Z',
   durationMs: 42,
   options: { allowEmpty: false, list: false },
 } as const;
+
+describe('run readiness accounting', () => {
+  it.each([
+    ['passed', undefined, 0],
+    ['failed', undefined, 1],
+    ['error', new FsIoError('The grounding cache could not be written.'), 3],
+    ['error', new MissingPlanError('The plan does not exist.'), 4],
+    ['error', new ConfigInvalidError('The target configuration is invalid.'), 2],
+  ] as const)('TEST-READY-5 leaves %s summary and exit %i independent of readiness', (status, error, exitCode) => {
+    const initial = caseOutcome(status, 'case.test.md', error);
+    const row: RunCaseOutcome = status === 'failed' ? { ...initial, result: { ...initial.result, steps: [{ id: 'assert', target: 'web', type: 'assert', status: 'failed', kind: 'assertion', expected: 'Dashboard', actual: 'Sign in' }] } } : initial;
+    const baseline = report({ outcome: { noTestsFound: false, results: [row] } });
+    const readinessValues: NonNullable<ExecutedRunResult['replayReadiness']>[] = [
+      { status: 'ready' },
+      { status: 'not-ready', reason: 'grounding-missing' },
+      { status: 'not-ready', reason: 'steps-unresolved', steps: [{ id: 'submit', reason: 'no-entry' }] },
+      { status: 'not-ready', reason: 'grounding-missing', unsavedReason: 'write-back-not-allowed' },
+    ];
+    for (const replayReadiness of readinessValues) {
+      const output = report({ outcome: { noTestsFound: false, results: [{ ...row, result: { ...row.result, replayReadiness } }] } });
+      expect(output.exitCode).toBe(exitCode);
+      expect(output.exitCode).toBe(baseline.exitCode);
+      expect(output.envelope.summary).toEqual(baseline.envelope.summary);
+      assertDiagnosable(output.envelope);
+      assertZeroAiCalls(output.envelope);
+    }
+  });
+});
 
 function report(input: {
   readonly outcome?: Omit<RunOutcome, 'listed' | 'skipped' | 'interrupted'> & {
@@ -401,7 +430,7 @@ describe('buildRunReport v3 interruption accounting', () => {
     } } as unknown as Omit<RunReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(2);
-    expect(output.envelope.schemaVersion).toBe('3.11');
+    expect(output.envelope.schemaVersion).toBe('3.12');
     expect(output.envelope.summary).toEqual({ total: 2, passed: 0, failed: 0, errored: 1, skipped: 1 });
     expect(output.envelope.results).toContainEqual({ id: 'pending.test.md', file: 'pending.test.md', status: 'skipped' });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));

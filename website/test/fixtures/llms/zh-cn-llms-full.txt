@@ -1638,7 +1638,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.11` |
+| `schemaVersion` | 字面量 `3.12` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | 格式为 `YYYY-MM-DDTHH:mm:ssZ` 的 UTC 字符串 |
 | `durationMs` | 非负整数 |
@@ -1683,9 +1683,25 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 | 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+
+`run` 会为取得有效且未过期执行计划的每个用例输出 `replayReadiness`，包括 `failed` 和 `error` 用例。取得执行计划前就结束的用例和 `heal` 行不含此字段。
+
+`ready` 表示定位缓存文件已包含无需 AI 回放所需的条目。此判定不涵盖页面变化导致条目不再匹配的情况。检查范围是 click、press、fill、fill-secret、capture 和 ai 步骤；不含这些步骤的执行计划为 `ready`。
+
+| `status` | 其他字段 |
+| --- | --- |
+| `ready` | 无 |
+| `not-ready` | `reason`：`grounding-missing`、`grounding-invalid`、`grounding-stale` 或 `grounding-unreadable` |
+| `not-ready` | `reason: 'steps-unresolved'`，以及按执行计划顺序排列的非空 `steps` 数组 |
+
+`steps` 中的每项为 `{ id, reason }`。缺少条目时，理由为 `no-entry`；类型或意图不匹配时为 `entry-mismatch`；AI 步骤的记录缺少回放所需验证时为 `trace-uncovered`。
+
+判定依据是回写处理结束后重新读取的文件。只有在 `not-ready` 且存在待保存的更改，但回写权限不允许保存时，结果才带 `unsavedReason: 'write-back-not-allowed'`。写入失败时不加此字段，而是通过用例错误说明。
+
+`replayReadiness` 在 schema 中是可选字段。3.11 及更早版本的报告即使没有此字段也仍可读取。准备状态不会改变用例的通过与否或退出码。
 
 ## check 的结果 {#check-results}
 
@@ -1693,10 +1709,15 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 | 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile`, `replayReadiness` | — |
+| `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
+
+只有 `fresh` 行带 `replayReadiness`。其值为 `{ status: 'ready' }`，或包含 `status: 'not-ready'`、`reason: 'steps-unresolved'` 和 `steps` 的对象。`steps` 的结构与 [run 的结果](#run-results)相同。
+
+`check` 不输出 `unsavedReason`。包括 `fresh-without-grounding` 在内的其他状态行均不含 `replayReadiness`。
 
 ## heal 的结果 {#heal-results}
 
@@ -1839,16 +1860,16 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 只有写入方固定在当前的 schema 版本，查看器会宽松地读取任何 3.x 报告。下面的示例各展示一个命令的信封。
 
 ```json
-{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容锚点 {#report-persistence}
@@ -2093,7 +2114,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.11"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
 
 另有 5 个冻结快照，供已废弃契约的使用者使用。站点从已提交的文件发布这些快照，npm 软件包不导出它们。
 
@@ -2116,7 +2137,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | `plan.schema.json` | 执行计划 `schemaVersion` 为 5，并包含来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 定位缓存 `schemaVersion` 为 4，并包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` 为必填项，其余声明的设置项均为可选项的当前配置文档。 | 转换为 JSON Schema 2020-12 的 Zod `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report `schemaVersion` 为 3.11 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report `schemaVersion` 为 3.12 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` 先编译软件包，再运行 `node dist/schema-gen.js`。该脚本递归创建 Schema 目录，并写入上述 4 个 Schema 文件。它还会在 `dist/manifest/` 下写入清单文件。
 
@@ -2132,7 +2153,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.11、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
+`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.12、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
 
 ## 另请参阅 {#see-also}
 
@@ -2859,6 +2880,22 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 
 运行结果状态包括 `passed`、`failed`、`error`、`listed` 与 `skipped`；进程退出码的数值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)确定。
 
+用例为 `passed` 且 `replayReadiness.status` 为 `not-ready` 时，面向人的输出会在结果下方打印一行：
+
+```text
+  replay: not ready (run "ambercast run --resolve --update-cache <file>")
+```
+
+如果回写权限不允许保存更改，则改为打印：
+
+```text
+  replay: not ready (the grounding was not saved; rerun with --update-cache)
+```
+
+`<file>` 是提示词路径。`failed` 和 `error` 用例不显示此行。
+
+在 JSON 中，取得执行计划后失败的用例也带可选的 `replayReadiness`。准备状态不会改变退出码。[报告](/ambercast/zh-cn/reference/reports/#run-results)定义了字段值及判定范围。
+
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#run-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
 
 ---
@@ -2903,6 +2940,16 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/check/
 ## 结果 {#results}
 
 完整的检查发现包含 `id`、`file`、`planFile`、`status` 和 `reason`。`groundingFile` 或 `artifactFile` 只在作为该发现的证据时出现。状态为 `invalid-artifact-name` 的发现是例外：它没有 `planFile`，而是包含 `id`、`file`、`status`、`reason` 和 `artifactFile`，其中 `id`、`file` 和 `artifactFile` 指向产物本身。完整的字段定义和报告结构见[报告](/ambercast/zh-cn/reference/reports/#check-results)。
+
+`fresh` 行带可选的 `replayReadiness`。其值为 `ready`，或理由为 `steps-unresolved` 的 `not-ready`。其他状态的行不含此字段。准备状态不会改变行的 `status`、`reason` 或退出码。
+
+理由为 `steps-unresolved` 时，面向人的输出会在结果下方打印一行：
+
+```text
+  replay: not ready (<n> steps without usable grounding: <ids>; run "ambercast run --resolve --update-cache <file>")
+```
+
+`<n>` 是涉及的步骤数，`<ids>` 是用 `, ` 连接的步骤 ID。只有一个步骤时显示 `1 step`。`<file>` 是提示词路径。
 
 ## 只读检查 {#read-only-contract}
 
@@ -3205,7 +3252,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 | 执行计划的 `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | 定位缓存的 `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
 | 指纹算法 | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.11` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 
 ## 阅读顺序 {#reading-order}
 
@@ -4032,6 +4079,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
 | 用例的所有步骤都通过后，click、press、fill、fill-secret 和 capture 的定位缓存条目也会在允许回写时保存。定位缓存格式不变。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 无需迁移。 |
 | provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
 | report 3.10 → 3.11 新增 `generator-assumption` 警告。Stage 3 接受的假设仅出现在 `healed` 行的可选 `warnings` 中。假设不会阻止 generate 或 heal。单目标响应的歧义变为可重试的 `AI_RESPONSE_INVALID`，退出码为 3。多目标分配未确定时仍为 `PROMPT_AMBIGUOUS`，退出码为 2。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 验证封闭 union 的使用者必须 (MUST) 使用 3.11 Schema。参见[升级步骤](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change)。 |

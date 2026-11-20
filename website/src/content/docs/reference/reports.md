@@ -11,7 +11,7 @@ All objects in the public report schemas are strict and reject unknown fields. T
 
 | field | type and contract |
 | --- | --- |
-| `schemaVersion` | literal `3.11` |
+| `schemaVersion` | literal `3.12` |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC string shaped `YYYY-MM-DDTHH:mm:ssZ` |
 | `durationMs` | non-negative integer |
@@ -56,9 +56,25 @@ Every `RunResult` branch is strict.
 
 | status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+
+`run` emits `replayReadiness` for every case that obtained a valid, fresh plan, including `failed` and `error` cases. Cases that stop before obtaining that plan and `heal` rows omit it.
+
+`ready` means the grounding file contains the entries needed for replay without AI. It does not cover page changes that make those entries stop matching. The inspected steps are click, press, fill, fill-secret, capture, and ai; a plan with none of these is `ready`.
+
+| `status` | other fields |
+| --- | --- |
+| `ready` | none |
+| `not-ready` | `reason`: `grounding-missing`, `grounding-invalid`, `grounding-stale`, or `grounding-unreadable` |
+| `not-ready` | `reason: 'steps-unresolved'` and a nonempty `steps` array in plan order |
+
+Each `steps` item is `{ id, reason }`. The reason is `no-entry` for a missing entry, `entry-mismatch` for an incompatible kind or intent, or `trace-uncovered` for an AI trace without the verification needed for replay.
+
+The assessment uses the file read again after grounding write-back processing. A `not-ready` result adds `unsavedReason: 'write-back-not-allowed'` only when changes needed saving but write-back permission prevented it. A write failure instead appears as a case error and does not add this field.
+
+`replayReadiness` is optional in the schema. Reports from 3.11 and earlier remain readable without it. Readiness changes neither the case verdict nor the exit code.
 
 ## Check results {#check-results}
 
@@ -66,10 +82,13 @@ Every `CheckResult` branch is strict.
 
 | status | required fields | optional fields | forbidden fields |
 | --- | --- | --- | --- |
-| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile`, `replayReadiness` | — |
+| `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
+
+Only `fresh` rows carry `replayReadiness`. The value is `{ status: 'ready' }` or an object with `status: 'not-ready'`, `reason: 'steps-unresolved'`, and `steps`. The `steps` shape matches [Run results](#run-results). `check` never emits `unsavedReason`. Other statuses, including `fresh-without-grounding`, omit `replayReadiness`.
 
 ## Heal results {#heal-results}
 
@@ -212,16 +231,16 @@ The `reportPersistence` property records the write outcome:
 Only the writer is pinned to the current schema version. The viewer reads any 3.x report leniently. The examples below show one envelope per command.
 
 ```json
-{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility anchor {#report-persistence}

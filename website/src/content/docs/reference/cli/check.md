@@ -41,6 +41,16 @@ You can pass prompt paths directly or let [configured discovery](/ambercast/refe
 
 A completed finding carries `id`, `file`, `planFile`, `status`, and `reason`. The `groundingFile` or `artifactFile` field appears only as evidence for a finding. A finding with status `invalid-artifact-name` is the exception: it has no `planFile` and carries `id`, `file`, `status`, `reason`, and `artifactFile`, where `id`, `file`, and `artifactFile` name the artifact itself. [Reports](/ambercast/reference/reports/#check-results) lists the full field definitions and report structures.
 
+A `fresh` row carries the optional `replayReadiness`. Its value is `ready` or `not-ready` with reason `steps-unresolved`. Other statuses omit it. Readiness changes neither the row's `status` and `reason` nor the exit code.
+
+When the reason is `steps-unresolved`, human output prints one line below the result:
+
+```text
+  replay: not ready (<n> steps without usable grounding: <ids>; run "ambercast run --resolve --update-cache <file>")
+```
+
+`<n>` counts the affected steps, and `<ids>` joins their IDs with `, `. For one step, the line says `1 step`. `<file>` is the prompt path.
+
 ## Read-only inspection {#read-only-contract}
 
 `check` is read-only. Its dependencies exclude AI runtimes, browser drivers, event dispatchers, and write storage. At runtime it composes read-only storage, the file layout rules (see [File layout](/ambercast/reference/file-layout/#companions)), and discovery (see [Configuration](/ambercast/reference/configuration/#file-selection)).

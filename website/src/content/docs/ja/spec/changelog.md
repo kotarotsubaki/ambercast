@@ -7,6 +7,7 @@ description: "アーティファクトのバージョン受け入れは、リリ
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| report 3.11 → 3.12 は任意の `replayReadiness` を追加する。 | `repo:src/report/schema.ts:58` | この項目がない旧版のレポートも読める。計画 5 とグラウンディング 4 は変わらず、再生成は不要である。 |
 | ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
 | report 3.10 → 3.11 は `generator-assumption` の警告を追加する。Stage 3 で採用した仮定は `healed` 行だけの任意の `warnings` に載る。仮定では generate や heal を止めない。単一ターゲットの応答の曖昧さは再試行可能な `AI_RESPONSE_INVALID` と終了コード 3 になる。複数ターゲットの未確定は `PROMPT_AMBIGUOUS` と終了コード 2 のままである。 | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | 閉じた union を検証する利用者は 3.11 のスキーマを使わなければならない（MUST）。[アップグレード手順](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) を参照する。 |

@@ -102,6 +102,7 @@ import type { UiExecutorResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
 import { OBSERVED_NOTE, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
+import { readReplayReadiness, type RunReplayReadiness } from './replay-readiness.js';
 import { z } from 'zod';
 import {
   assertSecretUsesAllowed,
@@ -4135,7 +4136,13 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   // preserve every writer in execution order so reports can reconstruct it.
   let runState: Map<RunVariableName, CapturedRunValue> | undefined;
   let context: DispatchContext | undefined;
-
+  let trustedPlanDocument: PlanDocument | undefined;
+  const writeBackAllowed = groundingWriteBackAllowed({
+    localWriteBack: deps.config.grounding.localWriteBack,
+    updateCache: options.updateCache,
+    isCI: deps.isCI,
+    updateGroundingCacheConfig: deps.config.ci.updateGroundingCache,
+  });
   try {
     let testMd: string;
     try {
@@ -4186,7 +4193,12 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       inputsDigest,
       normalizedTestMd,
     );
+    /*
+     * Retaining the trusted plan includes cases rejected by secret-use checks
+     * in the artifact assessment while excluding untrusted plans.
+     */
     const plan = trustedPlan.plan;
+    trustedPlanDocument = plan;
     assertSecretUsesAllowed(plan, deps.config.secrets?.allow ?? [], {
       configPath: deps.configSource?.path ?? null,
       cwd: deps.config.projectRoot ?? '',
@@ -4527,12 +4539,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       groundingDirty
       && groundingPath !== undefined
       && grounding !== undefined
-      && groundingWriteBackAllowed({
-        localWriteBack: deps.config.grounding.localWriteBack,
-        updateCache: options.updateCache,
-        isCI: deps.isCI,
-        updateGroundingCacheConfig: deps.config.ci.updateGroundingCache,
-      })
+      && writeBackAllowed
     ) {
       try {
         /*
@@ -4577,10 +4584,21 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     }
   }
 
+  /*
+   * Readiness describes saved evidence independently of the case outcome.
+   * Using the write-back storage also preserves heal's overlay isolation.
+   */
+  let replayReadiness: RunReplayReadiness | undefined = trustedPlanDocument === undefined
+    ? undefined
+    : await readReplayReadiness(deps.storage, groundingPath, trustedPlanDocument);
+  if (replayReadiness?.status === 'not-ready' && groundingDirty && !writeBackAllowed) {
+    replayReadiness = { ...replayReadiness, unsavedReason: 'write-back-not-allowed' };
+  }
   const durationMs = deps.clock.monotonicMs() - startedAt;
   return {
     result: {
       ...result!,
+      ...(replayReadiness === undefined ? {} : { replayReadiness }),
       steps: backfillConfirmedBindings(context, result!.steps),
       durationMs,
       aiCalls: context?.aiCalls ?? 0,

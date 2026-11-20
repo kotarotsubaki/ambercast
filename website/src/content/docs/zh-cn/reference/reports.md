@@ -11,7 +11,7 @@ description: ambercast 结构化 JSON 报告的信封、各命令的结果形状
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.11` |
+| `schemaVersion` | 字面量 `3.12` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | 格式为 `YYYY-MM-DDTHH:mm:ssZ` 的 UTC 字符串 |
 | `durationMs` | 非负整数 |
@@ -56,9 +56,25 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 | 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
+
+`run` 会为取得有效且未过期执行计划的每个用例输出 `replayReadiness`，包括 `failed` 和 `error` 用例。取得执行计划前就结束的用例和 `heal` 行不含此字段。
+
+`ready` 表示定位缓存文件已包含无需 AI 回放所需的条目。此判定不涵盖页面变化导致条目不再匹配的情况。检查范围是 click、press、fill、fill-secret、capture 和 ai 步骤；不含这些步骤的执行计划为 `ready`。
+
+| `status` | 其他字段 |
+| --- | --- |
+| `ready` | 无 |
+| `not-ready` | `reason`：`grounding-missing`、`grounding-invalid`、`grounding-stale` 或 `grounding-unreadable` |
+| `not-ready` | `reason: 'steps-unresolved'`，以及按执行计划顺序排列的非空 `steps` 数组 |
+
+`steps` 中的每项为 `{ id, reason }`。缺少条目时，理由为 `no-entry`；类型或意图不匹配时为 `entry-mismatch`；AI 步骤的记录缺少回放所需验证时为 `trace-uncovered`。
+
+判定依据是回写处理结束后重新读取的文件。只有在 `not-ready` 且存在待保存的更改，但回写权限不允许保存时，结果才带 `unsavedReason: 'write-back-not-allowed'`。写入失败时不加此字段，而是通过用例错误说明。
+
+`replayReadiness` 在 schema 中是可选字段。3.11 及更早版本的报告即使没有此字段也仍可读取。准备状态不会改变用例的通过与否或退出码。
 
 ## check 的结果 {#check-results}
 
@@ -66,10 +82,15 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 | 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `fresh`, `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
+| `fresh` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile`, `replayReadiness` | — |
+| `stale`, `orphaned-plan`, `orphaned-grounding`, `missing-plan`, `missing-grounding`, `stale-grounding`, `invalid-grounding`, `fresh-without-grounding` | `id`, `file`, `planFile`, `reason` | `groundingFile`, `artifactFile` | — |
 | `invalid-artifact-name` | `id`, `file`, `artifactFile`, `reason` | — | `planFile`, `groundingFile` |
 | `listed` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
 | `skipped` | `id`, `file` | — | `planFile`, `reason`, `groundingFile`, `artifactFile` |
+
+只有 `fresh` 行带 `replayReadiness`。其值为 `{ status: 'ready' }`，或包含 `status: 'not-ready'`、`reason: 'steps-unresolved'` 和 `steps` 的对象。`steps` 的结构与 [run 的结果](#run-results)相同。
+
+`check` 不输出 `unsavedReason`。包括 `fresh-without-grounding` 在内的其他状态行均不含 `replayReadiness`。
 
 ## heal 的结果 {#heal-results}
 
@@ -212,16 +233,16 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 只有写入方固定在当前的 schema 版本，查看器会宽松地读取任何 3.x 报告。下面的示例各展示一个命令的信封。
 
 ```json
-{"schemaVersion":"3.11","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.11","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.11","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容锚点 {#report-persistence}

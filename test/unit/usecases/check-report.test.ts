@@ -6,6 +6,7 @@ import type { AmbercastError } from '#core/errors/types.js';
 import { CheckResult, ReportEnvelope } from '#report/schema.js';
 import { buildCheckReport, type CheckReportInput } from '#usecases/check-report.js';
 import type { CheckOutcome } from '#usecases/check.js';
+import { assertDiagnosable } from '../../support/report-assertions.js';
 
 const BASE = {
   startedAt: '2026-08-17T00:00:00Z',
@@ -47,6 +48,21 @@ function report(input: {
 }
 
 describe('buildCheckReport', () => {
+  it.each([false, true])('TEST-READY-5 leaves fresh summary and exit unchanged with a file error: %s', hasError => {
+    const row = result('fresh');
+    const errors = hasError ? [{ file: 'broken.test.md', error: new FsIoError('The grounding cache could not be read.') }] : [];
+    const baseline = report({ outcome: { noTestsFound: false, results: [row], errors } });
+    for (const replayReadiness of [
+      { status: 'ready' },
+      { status: 'not-ready', reason: 'steps-unresolved', steps: [{ id: 'submit', reason: 'no-entry' }] },
+    ] as const) {
+      const output = report({ outcome: { noTestsFound: false, results: [{ ...row, replayReadiness } as CheckResult], errors } });
+      expect(output.exitCode).toBe(hasError ? 3 : 0);
+      expect(output.exitCode).toBe(baseline.exitCode);
+      expect(output.envelope.summary).toEqual(baseline.envelope.summary);
+      assertDiagnosable(output.envelope);
+    }
+  });
   it.each([
     ['all fresh', [result('fresh')], { total: 1, passed: 1, failed: 0, errored: 0, skipped: 0 }],
     ['all non-fresh', [result('stale'), result('missing-plan')], { total: 2, passed: 0, failed: 2, errored: 0, skipped: 0 }],
@@ -81,7 +97,7 @@ describe('buildCheckReport', () => {
     const output = report({ outcome: { noTestsFound: false, results, errors: [] } });
 
     expect(ReportEnvelope.parse(output.envelope)).toEqual({
-      schemaVersion: '3.11',
+      schemaVersion: '3.12',
       command: 'check',
       startedAt: BASE.startedAt,
       durationMs: BASE.durationMs,
@@ -207,7 +223,7 @@ describe('buildCheckReport v3 interruption accounting', () => {
     } } as unknown as Omit<CheckReportInput, keyof typeof BASE>);
 
     expect(output.exitCode).toBe(3);
-    expect(output.envelope.schemaVersion).toBe('3.11');
+    expect(output.envelope.schemaVersion).toBe('3.12');
     expect(output.envelope.summary).toEqual({ total: 1, passed: 0, failed: 0, errored: 0, skipped: 1 });
     expect(output.envelope.errors).toContainEqual(expect.objectContaining({ scope: 'run', code: 'INTERRUPTED' }));
   });

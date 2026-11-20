@@ -57,4 +57,20 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 
 运行结果状态包括 `passed`、`failed`、`error`、`listed` 与 `skipped`；进程退出码的数值及其优先级由[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)确定。
 
+用例为 `passed` 且 `replayReadiness.status` 为 `not-ready` 时，面向人的输出会在结果下方打印一行：
+
+```text
+  replay: not ready (run "ambercast run --resolve --update-cache <file>")
+```
+
+如果回写权限不允许保存更改，则改为打印：
+
+```text
+  replay: not ready (the grounding was not saved; rerun with --update-cache)
+```
+
+`<file>` 是提示词路径。`failed` 和 `error` 用例不显示此行。
+
+在 JSON 中，取得执行计划后失败的用例也带可选的 `replayReadiness`。准备状态不会改变退出码。[报告](/ambercast/zh-cn/reference/reports/#run-results)定义了字段值及判定范围。
+
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#run-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。

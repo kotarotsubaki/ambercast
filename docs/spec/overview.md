@@ -35,7 +35,7 @@ A Plan records its `inputsDigest`, and `planDigest` is computed from the Plan. A
 | Plan `schemaVersion` | `5` | repo:src/core/ir/schema.ts:62 |
 | Grounding `schemaVersion` | `4` | repo:src/core/ir/schema.ts:74 |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | repo:src/core/ir/schema.ts:303 |
-| Report `schemaVersion` | `3.11` | repo:src/report/schema.ts:58 |
+| Report `schemaVersion` | `3.12` | repo:src/report/schema.ts:58 |
 
 ## Reading order {#reading-order}
 

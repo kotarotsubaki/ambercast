@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0](https://github.com/kotarotsubaki/ambercast/compare/v0.10.0...v0.11.0) (2026-11-20)
+
+
+### Features
+
+* **report:** report whether a case is ready for zero-AI replay in run and check ([#714](https://github.com/kotarotsubaki/ambercast/issues/714)) ([2eabcfe](https://github.com/kotarotsubaki/ambercast/commit/2eabcfeaa4bfa373e94a3c5fd552461fe6e0d15a))
+* **run:** record why first-binding resolution failed in GROUNDING_UNRESOLVED details ([#716](https://github.com/kotarotsubaki/ambercast/issues/716)) ([c508ac3](https://github.com/kotarotsubaki/ambercast/commit/c508ac33f75f5f29bae5b46914727adf8abd364f))
+* **run:** warn when an assertion already held before the preceding actions ran ([#715](https://github.com/kotarotsubaki/ambercast/issues/715)) ([e5c6bb2](https://github.com/kotarotsubaki/ambercast/commit/e5c6bb22214a62a5d557f36eed4fcacb07761b31))
+
+
+### Bug Fixes
+
+* **run:** save every acted element binding when a case completes ([#713](https://github.com/kotarotsubaki/ambercast/issues/713)) ([f4df785](https://github.com/kotarotsubaki/ambercast/commit/f4df7856044678a8403f9fc9c9fdf7f07fa9eed9))
+
 ## [0.10.0](https://github.com/kotarotsubaki/ambercast/compare/v0.9.0...v0.10.0) (2026-11-07)
 
 

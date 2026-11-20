@@ -56,7 +56,7 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 
 | 状态 | 必需字段 | 可选字段 | 禁止字段 |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness`, `warnings` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
@@ -75,6 +75,45 @@ ambercast 不会把假设存入执行计划。对仍然新鲜的执行计划再�
 判定依据是回写处理结束后重新读取的文件。只有在 `not-ready` 且存在待保存的更改，但回写权限不允许保存时，结果才带 `unsavedReason: 'write-back-not-allowed'`。写入失败时不加此字段，而是通过用例错误说明。
 
 `replayReadiness` 在 schema 中是可选字段。3.11 及更早版本的报告即使没有此字段也仍可读取。准备状态不会改变用例的通过与否或退出码。
+
+### 操作前已成立的断言警告 {#assertion-warnings}
+
+`run` 结果中的 `warnings` 用 `{ kind: 'assert-held-before-actions', stepId }` 标记操作前已成立的断言。`stepId` 指向执行时也通过的 assert。这个断言可能没有验证从上一次检查到本次检查之间一系列操作的效果。
+
+警告本身不改变判定或退出码，通过的断言仍然通过。要提高断言质量，应检查操作生效后才成立的条件，例如只在操作后出现的文字。参见[提示词示例](/ambercast/zh-cn/how-to/write-effective-prompts/#quote-new-text)。
+
+确认块由连续的 assert 组成。区间从前一个确认块结束后开始，到下一个确认块结束时为止；第一个区间从用例开头开始。capture 会分隔确认块，但不算操作。
+
+这里的操作包括 click、press、fill、fill-secret、navigate 和 ai 步骤。如果区间包含操作，ambercast 会在第一个操作之前，对末尾确认块中的每个 assert 求值一次。
+
+支持的检查类型如下：
+
+- text-visible
+- element-visible
+- text-equals
+- url-matches
+- element-count
+
+AI 步骤内部的检查和不含操作的区间不在观测范围内。
+
+观测只读取页面，不增加或改变操作、AI 调用、event 或保存的文件。如果目标的 session 尚未启动，ambercast 会跳过观测，不会为观测启动它。无法观测时，或执行时变量展开后的期望值与观测时不同，都不会产生警告。
+
+是否使用 `--resolve` 不影响这一行为。heal 内部的回放不进行观测，heal 行也不包含此类警告。`healed` 行中的 `generator-assumption` 警告与此不同。
+
+取得有效且最新执行计划的用例会包含 `warnings`，没有警告时为空数组。随后失败或出错的用例仍会保留此前已通过断言的警告，顺序与执行计划一致。取得执行计划前就停止的用例省略该字段。
+
+schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍可读取。面向人的输出在用例行下方逐条显示警告，每条一行，位置在回放准备状态的提示之前。
+
+```text
+  warning: <stepId>: this assertion already held before the preceding actions ran, so it may not verify their effect
+```
+
+此警告有以下局限：
+
+- 检查状态保持不变的有效断言也可能触发警告，例如再次导航到同一页面。
+- 观测只发生在区间的第一个操作之前。如果断言在区间中途才成立，即使未验证后续操作的效果，也不会触发警告。
+- 如果前一个操作引起的渲染尚未完成，观测可能漏掉警告。
+- 观测耗时可能推迟后续步骤的开始。在页面随时间变化的应用中，这种延迟可能导致针对短暂出现目标的操作失败。
 
 ## check 的结果 {#check-results}
 

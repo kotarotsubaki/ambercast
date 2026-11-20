@@ -565,6 +565,8 @@ function replayOptions(file: string, options: HealOptions, resolve: boolean) {
     files: [file],
     ...(options.target === undefined ? {} : { target: options.target }),
     resolve,
+    // Advisory reads must not consume heal's real-clock AI budget.
+    skipAssertObservation: true,
     updateCache: resolve,
     allowEmpty: true,
     list: false,

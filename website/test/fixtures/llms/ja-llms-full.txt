@@ -1683,7 +1683,7 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 
 | ステータス | 必須フィールド | 任意フィールド | 禁止フィールド |
 | --- | --- | --- | --- |
-| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness` | — |
+| `passed` / `failed` / `error` | `id`, `file`, `planFile`, `durationMs`, `steps`, `sessions`, `explanation` | `aiCalls`, `replayReadiness`, `warnings` | — |
 | `listed` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 | `skipped` | `id`, `file` | — | `planFile`, `durationMs`, `steps`, `explanation`, `aiCalls` |
 
@@ -1702,6 +1702,39 @@ ambercast は前提を計画（plan）に保存しない。鮮度が保たれた
 判定は、書き戻しの処理後にファイルを読み直した内容を使う。`not-ready` で、保存すべき変更を書き戻しの許可がないため保存しなかった場合だけ、`unsavedReason: 'write-back-not-allowed'` が付く。書込みの失敗ではこの項目を付けず、ケースのエラーで伝える。
 
 `replayReadiness` はスキーマ上任意である。この項目がない 3.11 以前のレポートも読める。準備状態によってケースの合否や終了コードは変わらない。
+
+### 操作前から成り立つ確認の警告 {#assertion-warnings}
+
+`run` の `warnings` は、操作前から成り立っていた確認を `{ kind: 'assert-held-before-actions', stepId }` で示す。`stepId` は、実行時にも pass した assert の ID である。この確認は、前の確認から今回の確認までに行った一連の操作の効果を確かめていない可能性がある。
+
+警告自体は合否や終了コードを変えず、pass した確認は pass のままである。確認の質を上げるには、操作後にだけ現れる文言など、操作の効果が現れて初めて成り立つ内容を書く。[プロンプトの作成例](/ambercast/ja/how-to/write-effective-prompts/#quote-new-text)も参照できる。
+
+判定の単位は、連続する assert のブロックである。区間は直前の確認ブロックの終わりから次の確認ブロックの終わりまでで、最初の区間はケースの先頭から始まる。capture は確認ブロックを区切るが、操作には数えない。
+
+操作として数えるのは click・press・fill・fill-secret・navigate と ai step である。区間に操作があれば、ambercast は最初の操作の前に、末尾の確認ブロックの assert を各1回だけ評価する。
+
+対象は text-visible・element-visible・text-equals・url-matches・element-count である。AI 内部の確認と、操作を含まない区間の確認は対象外である。
+
+観測は読み取りだけを行う。操作・AI 呼び出し・event・保存は変更せず、追加もしない。対象の session が未起動なら観測せず、観測のための起動は行わない。
+
+観測できなかった場合や、変数展開後の期待値が実行時と異なる場合は警告しない。
+
+`--resolve` の有無で判定は変わらない。heal 内の再生では観測せず、heal の行にこの警告は出ない。heal の `healed` 行が持つ `generator-assumption` の警告は別のものである。
+
+有効で最新の計画を得たケースには `warnings` があり、警告がなければ空配列になる。途中で failed・error になったケースにも、それまでに pass した確認の警告が計画順に残る。計画を得る前に終了したケースでは省略する。
+
+schema 上の `warnings` は optional である。`warnings` を持たない旧版の report も引き続き読める。人向けの出力では、ケースの行の下に警告を1件1行で表示し、再生準備の案内があればその前に置く。
+
+```text
+  warning: <stepId>: this assertion already held before the preceding actions ran, so it may not verify their effect
+```
+
+警告には次の限界がある。
+
+- 同じページへの再移動など、状態が変わらないことを確かめる有効な確認にも警告が出る。
+- 区間の最初の操作の前だけを調べる。区間の途中で初めて成り立った確認は、その後の操作の効果を見ていなくても警告しない。
+- 前の操作の描画が観測時に終わっていなければ、警告を見逃すことがある。
+- 観測に掛かる時間だけ後続の step の開始が遅れうる。時間とともに画面が変わるアプリでは、短時間だけ現れる対象への操作が失敗することもある。
 
 ## check の結果 {#check-results}
 

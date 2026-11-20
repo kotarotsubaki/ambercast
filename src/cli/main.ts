@@ -285,12 +285,14 @@ export function renderHumanReport(
     const row = `${colorize(status, statusColor, color)} ${escapeControlChars(String(item.file ?? item.id ?? ''))}${reason}`.trimEnd();
     // Provider text is untrusted, so the terminal projection escapes it while
     // only the original report retains raw text for JSON and MCP consumers.
-    // Other warning kinds stay off screen to preserve their presentation contract.
     const resultLines = [row];
     if (Array.isArray(item.warnings)) {
       for (const value of item.warnings as readonly unknown[]) {
         if (value === null || typeof value !== 'object') continue;
-        const warning = value as { readonly kind?: unknown; readonly message?: unknown };
+        const warning = value as { readonly kind?: unknown; readonly message?: unknown; readonly stepId?: unknown };
+        if (warning.kind === 'assert-held-before-actions' && typeof warning.stepId === 'string') {
+          resultLines.push(`  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.stepId)}: this assertion already held before the preceding actions ran, so it may not verify their effect`);
+        }
         if (warning.kind === 'generator-assumption' && typeof warning.message === 'string') {
           resultLines.push(`  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.message)}`);
         }

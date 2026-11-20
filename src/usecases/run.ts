@@ -61,6 +61,7 @@ import {
   TraceRecord,
   type AccessibilityElementRef,
   type ActionStep,
+  type AssertStep,
   type CaptureStep,
   type ElementIntent,
   type ElementRef,
@@ -101,7 +102,7 @@ import type { RunEvent } from '#ports/system.js';
 import type { UiExecutorResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
-import { OBSERVED_NOTE, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
+import { OBSERVED_NOTE, type AssertHeldBeforeActionsWarning, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
 import { readReplayReadiness, type RunReplayReadiness } from './replay-readiness.js';
 import { z } from 'zod';
 import {
@@ -151,6 +152,89 @@ type ResolutionVia = 'grounding' | 'ai-resolve' | 'quoted-match' | 'ai-proposed'
 type DispatchOutcome =
   | { readonly kind: 'passed'; readonly via?: ResolutionVia; readonly confirmationBasisValid?: boolean }
   | { readonly kind: 'assertion-failed'; readonly expected: string; readonly actual: string };
+
+// Absence represents unavailable evidence. Held evidence retains its expanded
+// predicate so a changed run value cannot cause a misleading warning.
+type AssertObservation =
+  | { readonly state: 'held'; readonly expectedValue: string | undefined }
+  | { readonly state: 'not-held' };
+
+/**
+ * Assigns each eligible confirmation block to its interval's first effect.
+ *
+ * Capture separates blocks without supplying an effect, so premise checks
+ * receive no observation. Trailing effects have no predicate to observe.
+ */
+function buildObservationPlan(steps: readonly Step[]): ReadonlyMap<number, readonly AssertStep[]> {
+  const plan = new Map<number, readonly AssertStep[]>();
+  let firstEffect: number | undefined;
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!;
+    if (step.kind === 'action' || step.kind === 'ai') {
+      firstEffect ??= index;
+    } else if (step.kind === 'assert') {
+      const block: AssertStep[] = [step];
+      while (steps[index + 1]?.kind === 'assert') {
+        block.push(steps[++index] as AssertStep);
+      }
+      if (firstEffect !== undefined) plan.set(firstEffect, block);
+      firstEffect = undefined;
+    }
+  }
+  return plan;
+}
+
+/**
+ * Collects advisory evidence without allowing observation failures to escape.
+ *
+ * The expired deadline reuses the production predicate for one evaluation,
+ * waiting for its reads without retries or an independent timeout. Invalid
+ * snapshots establish neither failure nor a held predicate. Integrity failures
+ * and interruption remain the responsibility of normal execution, preserving
+ * the existing post-step-start cancellation sequence.
+ *
+ * Observation is read-only: it issues no actions, navigation, reloads, AI calls
+ * or events, and changes no step results, evidence files, bindings, grounding
+ * or aiCalls. It does not alter verdicts, exit codes or either promotion path,
+ * regardless of resolve mode.
+ * These guarantees assume the screen stays stable during the extra reads:
+ * pending rendering can hide an already-held predicate, and elapsed time can
+ * make a transient target disappear before a later step starts.
+ */
+async function observeBlock(
+  context: DispatchContext,
+  asserts: readonly AssertStep[],
+  out: Map<StepId, AssertObservation>,
+): Promise<void> {
+  for (const assertion of asserts) {
+    if (context.signal?.aborted) return;
+    try {
+      if (context.sessions.peek(assertion.target) === undefined) continue;
+      const step = materializeStep(assertion, context.runState, context.targets[assertion.target]!.definition.baseUrl);
+      const outcome = await pollAssert(step, context, context.clock.monotonicMs());
+      if (outcome.kind === 'passed') {
+        out.set(assertion.id, { state: 'held', expectedValue: assertionExpectedValue(step) });
+      } else if (outcome.actual !== 'snapshot-invalid') {
+        out.set(assertion.id, { state: 'not-held' });
+      }
+    } catch {
+      // Advisory evidence cannot replace a production failure or interruption.
+    }
+  }
+}
+
+function assertionExpectedValue(step: Step): string | undefined {
+  if (step.kind !== 'assert') return undefined;
+  switch (step.check) {
+    case 'text-visible':
+    case 'text-equals':
+      return step.text;
+    case 'url-matches':
+      return step.pattern;
+    default:
+      return undefined;
+  }
+}
 
 /**
  * Tracks an action-kind step's transient binding during one runCase call.
@@ -3692,6 +3776,14 @@ function grepMatches(grep: RegExp, path: string, testDir: string): boolean {
  * prevents case execution.
  */
 export interface RunOptions {
+  /**
+   * Disables advisory assertion observation for internal heal replays.
+   *
+   * @remarks
+   * Internal orchestration only; this is not exposed through CLI, config or MCP.
+   */
+  readonly skipAssertObservation?: boolean;
+
   /** Literal prompt paths, or an empty list to use configured discovery. */
   readonly files: readonly string[];
 
@@ -4137,6 +4229,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let runState: Map<RunVariableName, CapturedRunValue> | undefined;
   let context: DispatchContext | undefined;
   let trustedPlanDocument: PlanDocument | undefined;
+  const warnings: AssertHeldBeforeActionsWarning[] = [];
   const writeBackAllowed = groundingWriteBackAllowed({
     localWriteBack: deps.config.grounding.localWriteBack,
     updateCache: options.updateCache,
@@ -4353,7 +4446,15 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     };
     const activeContext = context;
 
+    const observationPlan = buildObservationPlan(planSteps);
+    const observed = new Map<StepId, AssertObservation>();
+
     for (const [index, originalStep] of planSteps.entries()) {
+      // Advisory reads consume no step budget and preserve cancellation events.
+      const block = observationPlan.get(index);
+      if (block !== undefined && !options.skipAssertObservation) {
+        await observeBlock(activeContext, block, observed);
+      }
       currentStep = originalStep;
       /*
        * `step-start` emits here, unconditionally, because it records each step
@@ -4426,6 +4527,12 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       }
 
       completed.push(stepResult(originalStep, 'passed', undefined, undefined, activeContext));
+      if (step.kind === 'assert') {
+        const seen = observed.get(step.id);
+        if (seen?.state === 'held' && seen.expectedValue === assertionExpectedValue(step)) {
+          warnings.push({ kind: 'assert-held-before-actions', stepId: step.id });
+        }
+      }
       if (originalStep.kind !== 'assert' || originalStep.check !== 'element-visible' || outcome.confirmationBasisValid === true) {
         activeContext.validConfirmationSteps.add(originalStep.id);
       }
@@ -4595,9 +4702,11 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
     replayReadiness = { ...replayReadiness, unsavedReason: 'write-back-not-allowed' };
   }
   const durationMs = deps.clock.monotonicMs() - startedAt;
+  // Earlier passed assertions remain advisory evidence even if the case fails.
   return {
     result: {
       ...result!,
+      ...(trustedPlanDocument === undefined ? {} : { warnings }),
       ...(replayReadiness === undefined ? {} : { replayReadiness }),
       steps: backfillConfirmedBindings(context, result!.steps),
       durationMs,

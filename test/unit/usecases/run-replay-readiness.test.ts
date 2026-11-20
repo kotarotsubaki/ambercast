@@ -197,11 +197,27 @@ describe('TEST-READY-2 persisted run readiness', () => {
     assertZeroAiCalls(report(outcome).envelope);
   });
 
-  it('reports stored confirmations and unresolved trailing work after an assertion fails', async () => {
-    const f = await fixture([click(), check('confirm', ['click']), fill, check('failure')], {
-      browser: { assertOutcomes: [{ passed: true }, { passed: false, message: 'Dashboard absent.' }] },
-    });
-    const outcome = await execute(f);
+  it.each([false, true])('reports stored confirmations and unresolved trailing work after an assertion fails (skip observation=%s)', async (skipAssertObservation) => {
+    let failingStepStarted = false;
+    const f = await fixture([click(), check('confirm', ['click']), fill, check('failure')]);
+    const executor = f.deps.uiExecutor;
+    const emit = f.deps.events.emit.bind(f.deps.events);
+    const outcome = await execute(f, { ...f.deps,
+      events: { emit(event) {
+        emit(event);
+        if (event.type === 'step-start' && event.stepId === 'failure') failingStepStarted = true;
+      } },
+      uiExecutor(...args) {
+        const driver = executor(...args);
+        return { ...driver, async launch(...launchArgs) {
+          const session = await driver.launch(...launchArgs);
+          // Advisory reads cannot consume a later production verdict.
+          vi.spyOn(session, 'evaluateAssert').mockImplementation(async () => failingStepStarted
+            ? { passed: false, message: 'Dashboard absent.' } : { passed: true });
+          return session;
+        } };
+      },
+    }, { ...DEFAULT_OPTIONS, skipAssertObservation });
     expect(outcome.results[0]!.result.status).toBe('failed');
     expect(GroundingDocument.parse(JSON.parse(await f.deps.storage.readText(f.groundingPath))).entries).toEqual({ click: entry() });
     expect(readiness(outcome)).toEqual(unresolved('fill'));

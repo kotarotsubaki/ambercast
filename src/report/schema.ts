@@ -644,6 +644,20 @@ const CheckReplayReadiness = z.union([
   z.strictObject(UnresolvedReplayReadinessFields),
 ]);
 
+/**
+ * An assertion that passed already held before its preceding actions ran.
+ *
+ * This advisory warning suggests that the assertion may not verify their
+ * effect; it does not change the case verdict or grounding persistence.
+ */
+export const AssertHeldBeforeActionsWarning = z.strictObject({
+  kind: z.literal('assert-held-before-actions'),
+  stepId: StepId,
+});
+
+/** Advisory evidence that a passing assertion may not verify preceding actions. */
+export type AssertHeldBeforeActionsWarning = z.infer<typeof AssertHeldBeforeActionsWarning>;
+
 const ExecutedResultFields = {
   durationMs: NonNegativeInteger,
   // The dispatch boundary increments this independently of events so
@@ -694,6 +708,12 @@ export const ExecutedRunResult = z.strictObject({
   ...ExecutedResultFields,
   /** Optional for older reports; kept outside shared execution fields so heal rows never inherit it. */
   replayReadiness: ReplayReadiness.optional(),
+  /**
+   * Optional so reports written before assertion observation remain accepted.
+   * Kept run-only because heal rows omit observation and retain their own
+   * generator-assumption warnings on adopted repairs.
+   */
+  warnings: z.array(AssertHeldBeforeActionsWarning).optional(),
 });
 
 /**

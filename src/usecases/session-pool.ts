@@ -25,6 +25,17 @@ export interface SessionPool {
   acquire(name: string): Promise<BrowserSession>;
 
   /**
+   * Returns an already acquired session for the named target.
+   *
+   * This query never launches a session, allowing advisory reads to avoid
+   * changing browser startup order. Failed launches leave no acquired session.
+   *
+   * @param name - The target name to inspect.
+   * @returns The acquired session, or undefined before successful acquisition.
+   */
+  peek(name: string): BrowserSession | undefined;
+
+  /**
    * Closes acquired sessions and returns their close results.
    *
    * @remarks
@@ -66,6 +77,9 @@ export function createSessionPool(
   const sessions = new Map<string, BrowserSession>();
   const closeResults: Record<string, 'closed' | 'close-failed'> = {};
   return {
+    peek(name: string): BrowserSession | undefined {
+      return sessions.get(name);
+    },
     async acquire(name) {
       const existing = sessions.get(name);
       if (existing !== undefined) return existing;

@@ -274,14 +274,31 @@ export const SecretSyntaxRejectedDetails = z.strictObject({
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
 /**
- * Identifies the step and reason for an unresolved binding. The four new
- * reasons come from first-binding quote-match polling, one AI proposal, local
- * verification, and re-observation, beyond fail-closed grounding misses.
+ * Identifies the step and reason for an unresolved binding. Reasons distinguish
+ * first-binding failures during quote-match polling, AI proposal evaluation,
+ * local verification, and re-observation from fail-closed grounding misses.
+ * Optional diagnostics keep reports without these fields readable. The use
+ * case owns which fields accompany each stop point; the schema validates
+ * individual values without constraining their combinations. Proposal names
+ * may be empty because unnamed accessible elements are valid candidates.
  */
 export const GroundingUnresolvedDetails = z.strictObject({
   stepId: z.string(),
   reason: z.enum(['missing', 'recoverable-miss', 'no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed']),
+  proposalOutcome: z.enum(['none', 'ambiguous', 'found']).optional(),
+  proposalRole: z.string().optional(),
+  proposalName: z.string().optional(),
+  proposalMatchCount: z.int().nonnegative().optional(),
+  rejection: z.enum(['not-unique', 'snapshot-invalid', 'fingerprint-unavailable', 'role-mismatch']).optional(),
+  verification: z.enum(['fingerprint-mismatch', 'element-not-found', 'ambiguous-match', 'snapshot-invalid', 'secret-contaminated']).optional(),
 });
+/** Type-only parity keeps report validation aligned without importing core runtime values. */
+type GroundingMissReason = import('#core/errors/grounding-miss-reason.js').GroundingMissReason;
+type _GroundingMissReasonParity = [NonNullable<z.infer<typeof GroundingUnresolvedDetails>['verification']>] extends [GroundingMissReason]
+  ? [GroundingMissReason] extends [NonNullable<z.infer<typeof GroundingUnresolvedDetails>['verification']>] ? true : never
+  : never;
+const _groundingMissReasonParity: _GroundingMissReasonParity = true;
+void _groundingMissReasonParity;
 /** Projects an unexpected failure to a stable cause name rather than arbitrary error details. */
 export const UnexpectedCrashDetails = z.strictObject({ cause: z.strictObject({ name: CauseName }) });
 

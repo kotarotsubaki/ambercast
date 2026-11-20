@@ -1831,7 +1831,33 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` ケースの範囲のみ。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。追加の任意項目は下表を参照する。 |
+
+`GROUNDING_UNRESOLVED` の追加診断は、初回の対象特定で失敗した場合だけに付く。この段階では、AI が要素を提案する場合と、AI を呼ばずに引用から候補が一意に決まる場合がある。
+
+| 任意項目 | 意味 |
+| --- | --- |
+| `proposalOutcome` | AI の応答の種類。`none` は候補なし、`ambiguous` は曖昧、`found` は提案ありを示す。 |
+| `proposalRole`、`proposalName` | AI が提案した要素の role と名前。AI の応答の値を使い、名前が空文字でも出力する。ambercast は秘匿値と run 変数の値を伏せる。 |
+| `proposalMatchCount` | 提案がページ上で一致した件数。0 を含む非負の整数である。 |
+| `rejection` | 提案を採らなかった理由。`not-unique` は一意に定まらない、`snapshot-invalid` は画面の取得が不正、`fingerprint-unavailable` は候補の指紋が取れない、`role-mismatch` は role が意図と合わないことを示す。 |
+| `verification` | 操作直前の再観測で対象が変わったときの結果。値はグラウンディングの取り直し理由と同じで、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` のいずれかである。 |
+
+次の表の「提案の3項目」は `proposalOutcome: "found"`、`proposalRole`、`proposalName` を指す。
+
+| 止まった時点 | 追加する項目 |
+| --- | --- |
+| AI が候補なし・曖昧と答えた | `proposalOutcome` のみ。値は `none` または `ambiguous`。 |
+| AI の提案がページ上で一意に定まらない | 提案の3項目、`rejection: "not-unique"`、`proposalMatchCount`。 |
+| AI の提案を照合する際の画面の取得が不正 | 提案の3項目、`rejection: "snapshot-invalid"`。 |
+| 候補の指紋が取れない、または role が意図と合わない | `rejection: "fingerprint-unavailable"` または `rejection: "role-mismatch"`。AI が提案した候補なら提案の3項目も出力する。 |
+| 操作直前の再観測で対象が変わった | `verification`。AI が提案した候補なら提案の3項目も出力する。 |
+
+引用から一意に決まった候補には、提案の3項目は付かない。CLI の人向け出力とビューアーは、`stepId`、`reason` の後に `proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` の順で、存在する項目を表示する。
+
+この診断は失敗の原因を見分けるためのものである。初回の対象特定が実行ごとに揺れる問題そのものは解消しない。
+
+`reason` の語彙、`message`、`hint`、終了コード、再実行の手順は変わらない。`missing` など、ほかの `GROUNDING_UNRESOLVED` の `details` も変わらない。
 
 `AI_RESPONSE_INVALID` の問題の `code` は、次のいずれかである。
 
@@ -1982,7 +2008,7 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 | `UNEXPECTED_CRASH` | 許可リストに含まれる原因名。 |
 | `EXECUTOR_UNSUPPORTED` | ターゲット、実行器、理由（`surface-mismatch` または `capability-missing`）、不足している機能、任意でサーフェス。 |
 | `PROMPT_PATH_INVALID` | パスと理由（`outside-test-dir`、`not-test-md`、`no-name` のいずれか）。 |
-| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。 |
+| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 |
 
 ## 関連項目 {#see-also}
 

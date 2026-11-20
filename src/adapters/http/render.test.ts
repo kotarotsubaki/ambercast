@@ -34,6 +34,29 @@ function fixedCopyValues(value: unknown): Set<string> {
   return new Set(Object.values(value).flatMap((part) => [...fixedCopyValues(part)]));
 }
 
+describe('grounding error diagnostics', () => {
+  it.each([
+    [{ verification: 'element-not-found', rejection: 'not-unique', proposalMatchCount: 0, proposalName: '', proposalRole: 'button', proposalOutcome: 'found', reason: 'proposal-rejected', stepId: 'submit' },
+      ['stepId: submit', 'reason: proposal-rejected', 'proposalOutcome: found', 'proposalRole: button', 'proposalName: ', 'proposalMatchCount: 0', 'rejection: not-unique', 'verification: element-not-found']],
+    [{ verification: 'ambiguous-match', proposalName: '', reason: 'candidate-changed', stepId: 'submit' },
+      ['stepId: submit', 'reason: candidate-changed', 'proposalName: ', 'verification: ambiguous-match']],
+  ] as const)('TEST-DIAG-4 renders precisely the present diagnostics in CLI order: %j', (details, expected) => {
+    const html = renderRunDetail(readable({ errors: [{
+      scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login', message: 'The target cannot be bound.', details,
+    }] }));
+    expect([...html.matchAll(/<li>([^<]*)<\/li>/g)].map((match) => match[1])).toEqual(expected);
+  });
+  it('escapes proposal text at the HTML boundary', () => {
+    const html = renderRunDetail(readable({ errors: [{
+      scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login', message: 'The target cannot be bound.',
+      details: { stepId: 'submit', reason: 'proposal-rejected', proposalRole: '<button>', proposalName: '<script>alert("x")</script>&' },
+    }] }));
+    expect(html).toContain('<li>proposalRole: &lt;button&gt;</li>');
+    expect(html).toContain('<li>proposalName: &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;</li>');
+    expect(html).not.toContain('<script>');
+  });
+});
+
 describe('escapeHtml', () => {
   it.each([['&', '&amp;'], ['<', '&lt;'], ['>', '&gt;'], ['"', '&quot;'], ["'", '&#39;']])('escapes %s', (input, output) => {
     expect(escapeHtml(input)).toBe(output);

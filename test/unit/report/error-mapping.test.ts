@@ -18,6 +18,34 @@ import { CaseAbortedDetails, PromptAmbiguousDetails } from '#report/schema.js';
 
 const BROWSER_LAUNCH_FAILED_HINT = 'Install Chromium by running `npx playwright install chromium`, then retry.';
 
+describe('grounding diagnostics mapping', () => {
+  const diagnostics = { proposalOutcome: 'found', proposalRole: 'button', proposalName: '', proposalMatchCount: 0, rejection: 'not-unique', verification: 'element-not-found' } as const;
+  it.each([
+    diagnostics,
+    ...Object.entries(diagnostics).map(([key, value]) => ({ [key]: value })),
+    {},
+  ])('TEST-DIAG-1 carries precisely the supplied optional diagnostics: %j', (optional) => {
+    const details = { stepId: 'submit', reason: 'proposal-rejected' as const, ...optional };
+    const error = new GroundingUnresolvedError('The proposed target cannot be used.', details);
+    const mapped = errorMapping.reportError(error, { scope: 'case', caseId: 'login' });
+    expect(mapped).toEqual({ scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login', message: error.message,
+      hint: 'Quote the UI text in the prompt or run `ambercast heal` to update the binding.', details });
+    expect(ReportError.parse(mapped)).toEqual(mapped);
+  });
+  it.each(['missing', 'recoverable-miss', 'no-candidate', 'ambiguous', 'proposal-rejected', 'candidate-changed'] as const)(
+    'TEST-DIAG-2 preserves message and hint selection for %s', (reason) => {
+      const error = new GroundingUnresolvedError('The target is unavailable.', { stepId: 'submit', reason });
+      expect(errorMapping.reportError(error, { scope: 'case', caseId: 'login' })).toEqual({
+        scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login', message: error.message,
+        details: { stepId: 'submit', reason },
+        hint: reason === 'missing' || reason === 'recoverable-miss'
+          ? 'Run `ambercast run --resolve` to allow AI resolution for grounding misses.'
+          : 'Quote the UI text in the prompt or run `ambercast heal` to update the binding.',
+      });
+    },
+  );
+});
+
 const EXPECTED_REPORT_ERROR_DETAILS = {
   'config-invalid': { kind: 'usage', code: 'CONFIG_INVALID' },
   'secret-unresolved': { kind: 'usage', code: 'SECRET_UNRESOLVED' },

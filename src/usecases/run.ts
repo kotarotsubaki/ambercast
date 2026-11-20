@@ -62,6 +62,7 @@ import {
   type AccessibilityElementRef,
   type ActionStep,
   type AssertStep,
+  type ElementBindingProposal,
   type CaptureStep,
   type ElementIntent,
   type ElementRef,
@@ -2155,9 +2156,16 @@ export function jsonContainsResolvedSecret(
  * Rebuilds an error without retaining a materialized diagnostic.
  *
  * Classified errors retain their constructor so report policy continues to
- * recognize them. Their details are rebuilt with every string leaf and own
+ * recognize them. General details are rebuilt with every string leaf and own
  * enumerable object key redacted at any nesting depth, so structured
  * diagnostics cannot retain a materialized value below their top level.
+ *
+ * GroundingUnresolvedError needs a fixed-key reconstruction because generic
+ * JSON redaction rewrites keys as well as values; a captured value equal to a
+ * diagnostic key must not erase evidence at the report boundary. Existing
+ * stepId and reason redaction remains unchanged. Free-text proposal values
+ * are redacted, while closed vocabularies and counts retain their meaning so
+ * collisions with secrets or run variables cannot remove details or the hint.
  *
  * A causal error is always omitted: it may be an arbitrary underlying error
  * object that cannot safely rely on structured redaction. This
@@ -2177,6 +2185,21 @@ function redactedError(
 
   if (error instanceof AgenticTargetRejection) {
     return new AgenticTargetRejection(error.tool, error.reason, error.exhausted);
+  }
+
+  if (error instanceof GroundingUnresolvedError) {
+    const original = error.details as ConstructorParameters<typeof GroundingUnresolvedError>[1];
+    const redacted = redactJsonStrings(original, resolvedSecrets, runState) as Record<string, unknown>;
+    return new GroundingUnresolvedError(message, {
+      stepId: redacted.stepId as string,
+      reason: redacted.reason as typeof original.reason,
+      ...(original.proposalOutcome === undefined ? {} : { proposalOutcome: original.proposalOutcome }),
+      ...(original.proposalRole === undefined ? {} : { proposalRole: templateMaterializedValues(original.proposalRole, resolvedSecrets, runState) }),
+      ...(original.proposalName === undefined ? {} : { proposalName: templateMaterializedValues(original.proposalName, resolvedSecrets, runState) }),
+      ...(original.proposalMatchCount === undefined ? {} : { proposalMatchCount: original.proposalMatchCount }),
+      ...(original.rejection === undefined ? {} : { rejection: original.rejection }),
+      ...(original.verification === undefined ? {} : { verification: original.verification }),
+    });
   }
 
   if (error instanceof AmbercastError) {
@@ -2909,9 +2932,24 @@ export function buildRedactedAiProposalContext(
   redactor: typeof redactJsonStrings = redactJsonStrings,
 ): unknown {
   const redacted = redactor(value, resolvedSecrets, runState);
-  // Contaminated grounding will report a reason, never the resolved secret.
+  // Contaminated grounding reports a reason, never the resolved secret.
   if (jsonContainsResolvedSecret(redacted, resolvedSecrets)) throw groundingAbort('secret-contaminated');
   return redacted;
+}
+
+/** Preserves the AI's original answer when observed candidate names are normalized. */
+export function buildProposalDiagnostics(
+  proposal: Extract<ElementBindingProposal, { outcome: 'found' }>,
+  matches?: ReturnType<typeof matchQuotedCandidates>,
+): Pick<ConstructorParameters<typeof GroundingUnresolvedError>[1], 'proposalOutcome' | 'proposalRole' | 'proposalName' | 'rejection' | 'proposalMatchCount'> {
+  return {
+    proposalOutcome: 'found',
+    proposalRole: proposal.role,
+    proposalName: proposal.name,
+    ...(matches === undefined ? {} : Array.isArray(matches)
+      ? { rejection: 'not-unique' as const, proposalMatchCount: matches.length }
+      : { rejection: 'snapshot-invalid' as const }),
+  };
 }
 
 async function groundedTarget(
@@ -2960,17 +2998,18 @@ async function groundedTarget(
   });
   // A matching observation records a valid capture before completing, so this
   // all-invalid path receives the last non-matching observation's raw capture.
-  // An unusable snapshot will retain observed evidence without widening the reason vocabulary.
+  // An unusable snapshot retains observed evidence without widening the reason vocabulary.
   if (lastValidCapture === undefined) throw groundingClassificationAbort('snapshot-invalid', result.capture.tree ?? null);
   const quoteWaitMs = Math.max(0, Math.round(context.clock.monotonicMs() - quoteStartedMs));
   let candidate = quotedCandidate;
   let provenance: 'quoted-match' | 'ai-proposed' = 'quoted-match';
   let aiProposalMs: number | undefined;
+  let proposal: Extract<ElementBindingProposal, { outcome: 'found' }> | undefined;
   if (candidate === undefined) {
     const excerpt = extractSpan(context.normalizedTestMd, intent.sourceSpan);
     if (excerpt === undefined) throw new IntegrityViolationError('The validated element intent source span could not be re-extracted.');
     const proposalContext = buildRedactedAiProposalContext({ description: intent.description, ...(intent.quote === undefined ? {} : { quote: intent.quote.text }), ...(intent.roleHint === undefined ? {} : { roleHint: intent.roleHint }), excerpt, accessibilityTree: lastValidCapture.tree }, context.resolvedSecrets, runStateValues(context.runState));
-    // Proposal context is checked before provider use; the report will carry only the closed reason.
+    // Proposal context is checked before provider use; the report carries only the closed reason.
     if (jsonContainsResolvedSecret(proposalContext, context.resolvedSecrets)) throw groundingAbort('secret-contaminated');
     const executor = await context.resolveAiExecutor();
     const aiDeadline = composeAiDeadline(context.signal, context.aiTimeoutMs);
@@ -2979,20 +3018,26 @@ async function groundedTarget(
     // instruction change does not invalidate existing plans.
     const request = { prompt: buildGeneratorTask('Identify the exact accessible element matching the supplied description, quote, and role hint in the accessibility tree. If that element has no accessible name, return its role with an empty name (""). Return one ElementBindingProposal outcome. Put it under the "proposal" key.'), responseSchema: typedJsonSchema(ElementBindingProposalResponse), context: proposalContext as JsonValueT, signal: aiDeadline.signal };
     const result = await callAiExecutor(context, step.id, aiDeadline, () => executor.execute(request), (durationMs) => { aiProposalMs = durationMs; });
-    if (result.data.proposal.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.proposal.outcome === 'none' ? 'no-candidate' : 'ambiguous' });
-    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: result.data.proposal.name, roleHint: result.data.proposal.role });
-    if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected' });
+    // Outcome evidence preserves the provider's distinction between absence
+    // and ambiguity without changing failure classification or guidance.
+    if (result.data.proposal.outcome !== 'found') throw new GroundingUnresolvedError('No unique element binding proposal was returned.', { stepId: step.id, reason: result.data.proposal.outcome === 'none' ? 'no-candidate' : 'ambiguous', proposalOutcome: result.data.proposal.outcome });
+    proposal = result.data.proposal;
+    const matches = matchQuotedCandidates(lastValidCapture.tree as AccessibilityNode, { text: proposal.name, roleHint: proposal.role });
+    if (!Array.isArray(matches) || matches.length !== 1) throw new GroundingUnresolvedError('The proposed element was not uniquely present in the selected snapshot.', { stepId: step.id, reason: 'proposal-rejected', ...buildProposalDiagnostics(proposal, matches) });
     candidate = matches[0];
     provenance = 'ai-proposed';
   }
   const locator: AccessibilityElementRef = { strategy: 'accessibility', role: candidate!.role, name: candidate!.name };
   const fingerprint = computeAccessibilityFingerprint(lastValidCapture.tree, locator, context.resolvedSecrets.values());
-  // Classification failures will preserve the observation for redacted evidence capture.
+  // Classification failures preserve the observation for redacted evidence capture.
   if (fingerprint.kind === 'snapshot-invalid' || fingerprint.kind === 'secret-contaminated') throw groundingClassificationAbort(fingerprint.kind, lastValidCapture.tree);
-  if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected' });
+  // An unavailable fingerprint takes precedence because role agreement alone
+  // cannot establish that the candidate is safe to use.
+  if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected', rejection: fingerprint.kind !== 'ok' ? 'fingerprint-unavailable' : 'role-mismatch', ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
   context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
   const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
-  if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed' });
+  // The last observation explains why an initially selected candidate is unsafe.
+  if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed', verification: verified.reason, ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
   context.resolvedVias.set(step.id, provenance);
   return verified.element;
 }

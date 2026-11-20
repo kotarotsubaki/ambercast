@@ -66,7 +66,7 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 | `UNEXPECTED_CRASH` | 許可リストに含まれる原因名。 |
 | `EXECUTOR_UNSUPPORTED` | ターゲット、実行器、理由（`surface-mismatch` または `capability-missing`）、不足している機能、任意でサーフェス。 |
 | `PROMPT_PATH_INVALID` | パスと理由（`outside-test-dir`、`not-test-md`、`no-name` のいずれか）。 |
-| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。 |
+| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 |
 
 ## 関連項目 {#see-also}
 

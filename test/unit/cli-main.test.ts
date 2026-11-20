@@ -1236,6 +1236,18 @@ describe('main()', () => {
   });
 
   describe('renderHumanReport', () => {
+    it.each([
+      [{ verification: 'element-not-found', rejection: 'not-unique', proposalMatchCount: 0, proposalName: '', proposalRole: 'button', proposalOutcome: 'found', reason: 'proposal-rejected', stepId: 'submit' },
+        'stepId=submit; reason=proposal-rejected; proposalOutcome=found; proposalRole=button; proposalName=; proposalMatchCount=0; rejection=not-unique; verification=element-not-found'],
+      [{ verification: 'ambiguous-match', proposalName: '', reason: 'candidate-changed', stepId: 'submit' },
+        'stepId=submit; reason=candidate-changed; proposalName=; verification=ambiguous-match'],
+    ])('TEST-DIAG-4 renders grounding diagnostics in shared order and skips absent fields: %j', (details, expected) => {
+      const rendered = renderHumanReport({ ...RUN_ENVELOPE, errors: [{
+        scope: 'case', kind: 'usage', code: 'GROUNDING_UNRESOLVED', caseId: 'login',
+        message: 'The target cannot be bound.', hint: 'Check the target.', details,
+      }] } as never, false);
+      expect(rendered).toBe(`error GROUNDING_UNRESOLVED [login]: The target cannot be bound.\n  hint: Check the target.\n  details: ${expected}\n`);
+    });
     it('TEST-7 preserves the human error-details output captured before shared projection', () => {
       const errors = [
         { code: 'EXECUTOR_UNSUPPORTED', kind: 'usage', details: { surface: 'browser', missing: ['click'], reason: 'unsupported-action', executor: 'playwright', target: 'local' } },

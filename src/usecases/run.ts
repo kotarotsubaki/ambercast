@@ -157,7 +157,8 @@ type DispatchOutcome =
  * @remarks
  * SPEC-R5 transitions a locally verified SPEC-R4 stage-3 first binding from
  * candidate to acted after the operation succeeds, then to confirmed when
- * every step listing that action in `confirms` passes. A SPEC-R2 hit against
+ * every step listing that action in `confirms` passes with a valid basis,
+ * or when the case completes with every step passed. A SPEC-R2 hit against
  * an existing v4 entry enters directly at acted, with no candidate stage and
  * zero AI calls. `grounding` reports that fast path; `quoted-match` and
  * `ai-proposed` report fresh SPEC-R4 stage-1 and stage-2 bindings. This
@@ -168,8 +169,8 @@ type DispatchOutcome =
  * `quoteWaitMs` and `aiProposalMs` exist only if their respective first-binding
  * stage actually ran; the fast path has neither, and neither is backfilled.
  * SPEC-R6 forbids acting without candidate (except the fast-path acted entry),
- * persisting an acted-only state, and retrying an operation after its action
- * failed within the same run.
+ * persisting an acted-only state when the case does not complete, and
+ * retrying an operation after its action failed within the same run.
  * The transient locator uses GroundingElementLocator so an observed unnamed
  * candidate can reach confirmation without widening plan or trace references.
  */
@@ -2796,16 +2797,17 @@ async function executeAiStep(
  *    fingerprint. A miss is `candidate-changed`; a hit permits the operation.
  *
  * Stage 3 yields a `candidate` BindingState; only a successful operation may
- * advance it to `acted`. `promoteConfirmedBindings` promotes `acted`
- * to `confirmed` after every step listing this action in `confirms` passes,
- * updates the in-memory entry with kind, locator, fingerprint, intentDigest,
- * and provenance, and performs case-end write-back once under the existing
- * write-back and secret checks. That write-back replaces only confirmed step
- * entries, preserving all other loaded entries, including stale digests,
+ * advance it to `acted`. Promotion to `confirmed` has two triggers: every
+ * step listing the action in `confirms` passes with a valid basis, or the
+ * case completes with every step passed. Both triggers share entry assembly
+ * so replay receives the same locator, fingerprint, intent digest, and
+ * persisted provenance regardless of the trigger. Case-end write-back runs
+ * once under the existing write-back and secret checks. It replaces only
+ * confirmed step entries, preserving all other loaded entries, including stale digests,
  * unknown IDs, and entries for non-action steps. Never operate without a
  * candidate (except a verified confirmed-entry hit), persist an `acted`-only
- * binding, or retry an operation after its failure in the same run; discard
- * that binding and fail the step. A later failure never deletes a confirmed
+ * binding from a case that does not complete, or retry an operation after its
+ * failure in the same run; discard that binding and fail the step. A later failure never deletes a confirmed
  * entry that hit. An unconfirmed replacement after verify miss leaves the
  * old entry untouched.
  *
@@ -3433,6 +3435,95 @@ function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult[
 }
 
 /**
+ * Keeps validated entries with their bindings so application preserves metadata
+ * and cannot fail partway through entry construction.
+ */
+interface CompletionPromotion {
+  readonly stepId: StepId;
+  readonly state: BindingState;
+  readonly entry: GroundingEntry;
+}
+
+/**
+ * Both promotion triggers must produce identical replay identity from the
+ * original intent and verified binding. Persisted provenance is resolved by
+ * the caller because a cache hit inherits its stored origin.
+ */
+function buildElementEntry(
+  context: Pick<DispatchContext, 'actionSteps'>,
+  stepId: StepId,
+  state: BindingState,
+  provenance: 'quoted-match' | 'ai-proposed',
+): Extract<GroundingEntry, { kind: 'element' }> {
+  const actionStep = context.actionSteps.get(stepId);
+  if (actionStep === undefined || (actionStep.kind === 'action' && actionStep.action === 'navigate')) {
+    throw new IntegrityViolationError('A confirming step references no element action.');
+  }
+  const operation = actionStep.kind === 'capture' ? 'capture' : actionStep.action;
+  return {
+    kind: 'element',
+    locator: state.locator,
+    fingerprint: state.fingerprint,
+    intentDigest: computeIntentDigest({ stepKind: actionStep.kind, operation, intent: actionStep.intent }),
+    provenance,
+  };
+}
+
+/**
+ * Plans completion promotions without changing bindings or grounding.
+ *
+ * @param context - Case bindings and their original element steps.
+ * @returns Validated promotions in binding insertion order.
+ * @throws IntegrityViolationError if an acted binding has no element step
+ * or its provenance is not a persistable fresh-binding origin.
+ *
+ * @remarks
+ * Only acted bindings are eligible: candidates have no successful operation,
+ * and confirmed bindings already have entries. This also skips verified
+ * cache hits, preserving their entries and avoiding writes when all entries
+ * match. AI-step traces retain their separate persistence rules.
+ * Invalid entries must leave all completion targets untouched while preserving
+ * earlier confirms-triggered promotions.
+ * Completion accepts acted bindings independently of confirms coverage and
+ * confirmation-basis validity, including multiple element-visible matches.
+ */
+export function planCompletionPromotions(
+  context: Pick<DispatchContext, 'bindingStates' | 'actionSteps'>,
+): readonly CompletionPromotion[] {
+  const promotions: CompletionPromotion[] = [];
+  for (const [stepId, state] of context.bindingStates) {
+    if (state.stage !== 'acted') continue;
+    const provenance = state.provenance;
+    if (provenance === 'grounding' || provenance === undefined) {
+      throw new IntegrityViolationError('A cached binding has no persisted provenance.');
+    }
+    promotions.push({
+      stepId,
+      state,
+      entry: buildElementEntry(context, stepId, state, provenance),
+    });
+  }
+  return promotions;
+}
+
+/**
+ * Application must not throw: the plan belongs to this context with no
+ * intervening binding changes. Confirmation and entry registration must stay
+ * together so reports never claim confirmation without an entry to save.
+ * Binding metadata and entries outside the plan remain intact.
+ *
+ * The case-end write-back boundary alone owns persistence and secret checks;
+ * confirmation survives disallowed or failed writes. An empty
+ * plan preserves the no-write contract for matching cache hits.
+ */
+function applyCompletionPromotions(context: DispatchContext, plan: readonly CompletionPromotion[]): void {
+  for (const promotion of plan) {
+    context.bindingStates.set(promotion.stepId, { ...promotion.state, stage: 'confirmed' });
+    context.updateGroundingEntry(promotion.stepId, promotion.entry);
+  }
+}
+
+/**
  * Promote bindings after a passing step, with no effect unless it has a
  * non-empty `confirms` list (available only on assertions and AI steps).
  * Each listed action ID is a possible confirmation trigger. For an
@@ -3441,20 +3532,16 @@ function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult[
  * assertion pass but cannot confirm. Ordinary passes from the other four
  * assertion kinds and AI steps are valid bases. An invalid basis leaves the
  * case running and may be followed by another confirmer for the same action.
+ * This is the mid-case trigger; successful case completion separately
+ * promotes any remaining acted bindings, even without a valid confirmer.
  *
  * Confirm an action only when every ID in `context.confirmsIndex.get(actionId)`
  * has a passing result in this case with a valid basis. Missing, skipped,
  * unreached, and not-yet-executed results do not satisfy that requirement.
- * Since this runs once per newly passed step, consult `completed`, not merely
- * `passedStep`.
- *
  * On first confirmation, the action must already have a BindingState at
  * stage `acted`; an absent state or `candidate` is an invariant violation.
- * Change its stage to `confirmed`, retaining locator, fingerprint,
- * provenance, and timings. Update the in-memory grounding entry with
- * `{ kind: 'element', locator, fingerprint, intentDigest:
- * computeIntentDigest(actionStep), provenance }`. For a SPEC-R2 fast-path
- * binding, report provenance is `grounding`, but persisted provenance must
+ * Confirmation preserves binding metadata. For a SPEC-R2 fast-path binding,
+ * report provenance is `grounding`, but persisted provenance must
  * remain the pre-existing entry's `quoted-match` or `ai-proposed` value;
  * never persist the literal `grounding` as that entry's provenance.
  *
@@ -3490,8 +3577,7 @@ function promoteConfirmedBindings(
       ? context.grounding.entries[actionId]?.kind === 'element' ? context.grounding.entries[actionId].provenance : undefined
       : state.provenance;
     if (provenance === undefined) throw new IntegrityViolationError('A cached binding has no persisted provenance.');
-    const operation = actionStep.kind === 'capture' ? 'capture' : actionStep.action;
-    context.updateGroundingEntry(actionId, { kind: 'element', locator: state.locator, fingerprint: state.fingerprint, intentDigest: computeIntentDigest({ stepKind: actionStep.kind, operation, intent: actionStep.intent }), provenance });
+    context.updateGroundingEntry(actionId, buildElementEntry(context, actionId, state, provenance));
   }
 }
 
@@ -4342,6 +4428,13 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
       });
     }
 
+    // Failed assertions and exceptions must never promote remaining bindings.
+    // Integrity failures during completion belong to the case, preserving passed
+    // step rows without duplicating the last one. Earlier confirmations survive.
+    if (result === undefined) {
+      currentStep = undefined;
+      applyCompletionPromotions(activeContext, planCompletionPromotions(activeContext));
+    }
     result ??= {
       ...identity,
       status: 'passed',

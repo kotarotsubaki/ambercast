@@ -36,7 +36,13 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 `--resolve` 只处理两类情况：定位缓存不存在，以及结构有效但可恢复的条目。由已淘汰格式版本写入的定位缓存也属于可恢复情况。对含有元素绑定步骤的执行计划，不带 `--resolve` 时 `run` 会将其报告为 `GROUNDING_UNRESOLVED`，而 `run --resolve --update-cache` 会重新生成它。
 
-带 `--resolve` 时，元素未命中会实时解析。只有确认该绑定的所有步骤都通过，且回写开关允许时，ambercast 才会写入条目。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
+带 `--resolve` 时，元素未命中会实时解析。要在用例运行过程中确认绑定，至少一个步骤必须在 `confirms` 中列出该操作。当这些步骤都以有效依据通过时，ambercast 将条目列为待保存内容。
+
+用例的所有步骤都通过后，剩余的操作和 capture 条目也会列入。操作包括 click、press、fill 和 fill-secret。其中包括未列在 `confirms` 中的操作，以及 `element-visible` 断言匹配到多个候选的操作。
+
+用例中途失败或中断时，元素条目只有通过 `confirms` 确认后才可以保存。写入文件还需要回写开关允许。开关取决于 `localWriteBack`、`--update-cache` 和 `ci.updateGroundingCache`。
+
+用例通过且定位缓存保存成功后，同一执行计划可从相同页面状态开始回放，无需调用 AI。`ai` 步骤仍然只有在通过且留下验证记录时才创建条目。没有留下记录的通过仍需要在回放时使用 `--resolve`。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#grounding-write-back)、[控制定位缓存回写](/ambercast/zh-cn/how-to/control-grounding-writeback/)
 

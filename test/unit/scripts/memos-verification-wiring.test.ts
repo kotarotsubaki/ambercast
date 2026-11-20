@@ -6,8 +6,6 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, test, vi } from 'vitest';
 
 const root = new URL('../../../', import.meta.url);
-// @ts-expect-error The production ESM script is deliberately untyped JavaScript.
-import { unconfirmedSteps } from '../../../scripts/lib/memos-harness.mjs';
 
 const fixture = new URL('test/verification/memos/fixture/', root);
 const expectedCases = [
@@ -42,24 +40,13 @@ const pairPresent = (id: string) => planSuffixes.every(suffix => existsSync(new 
 // A case without its generated pair is skipped, except the sign-in smoke whose
 // pair stays required; handwritten IR cannot substitute for generation.
 const skipCase = (id: string) => !pairPresent(id) && (id !== 'memos-sign-in-create-memo' || markedIds.includes(id));
-describe('committed confirms coverage', () => {
-  for (const { id } of expectedCases) {
-    it.skipIf(skipCase(id))(`TEST-CNF-11 covers operations in ${id}`, () => {
-      expect(unconfirmedSteps(fixturePlan(id))).toEqual([]);
-    });
-  }
-  it('TEST-CNF-12 documents the confirms check in the regenerate paragraph', () => {
+describe('regeneration documentation', () => {
+  it('TEST-HARNESS-2 omits the pre-resolve confirms coverage check', () => {
     const paragraphs = readFileSync(new URL('CONTRIBUTING.md', root), 'utf8').split(/\n\s*\n/);
     const paragraph = paragraphs.find(text => text.includes('regenerate the fixture') && text.includes('--regenerate'));
     expect(paragraph).toBeDefined();
-    expect(paragraph).toContain('confirms');
-    const sentence = paragraph?.split(/(?<=[.!?])\s+/).find(text => text.includes('confirms'));
-    expect(sentence).toBeDefined();
-    expect(sentence).toMatch(/before.*resolve/i);
-    expect(sentence).toMatch(/without calling the AI|no AI/i);
-    expect(sentence).toMatch(/stop/i);
-    expect(sentence).toMatch(/action/i);
-    expect(sentence).toMatch(/capture or non-navigation action has no confirming step/i);
+    expect(paragraph).not.toMatch(/\bbefore resolve\b/i);
+    expect(paragraph).not.toMatch(/confirms|no confirming step|confirms coverage/i);
   });
 });
 const signIn = 'Open the sign-in page. Enter the username "verifier" and the saved password, then click "Sign in". Assert that the "Save" button is displayed. Then assert that the text "verifier" is displayed.';

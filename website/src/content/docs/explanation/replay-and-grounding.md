@@ -36,7 +36,13 @@ Grounding that fails its integrity checks fails closed even with `--resolve`. In
 
 `--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. For a plan with element-binding steps, `run` reports it as `GROUNDING_UNRESOLVED` without `--resolve`, and `run --resolve --update-cache` regenerates it.
 
-With `--resolve`, an element miss is resolved live. ambercast writes the entry only when every step that confirms the binding passes and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
+With `--resolve`, an element miss is resolved live. At least one step must list the action in `confirms` to confirm it during the case. ambercast prepares its entry for saving when all such steps pass with a valid confirmation basis.
+
+When every step in the case passes, ambercast also prepares the remaining click, press, fill, fill-secret, and capture entries. This includes actions absent from `confirms` and actions whose `element-visible` assertions matched multiple candidates.
+
+If a case fails or is interrupted before completion, only element entries confirmed through `confirms` qualify for saving. Writing the file requires permission from the write-back gate. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
+
+After the case passes and grounding is saved successfully, the same plan can replay from the same page state without AI calls. An `ai` step still creates an entry only when it passes with recorded verification. An `ai` step that passes without that record still needs `--resolve` on replay.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 

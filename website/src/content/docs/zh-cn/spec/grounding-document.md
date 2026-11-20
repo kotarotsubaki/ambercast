@@ -76,7 +76,12 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 成功回放现有轨迹之后，实现必须 (MUST) 保持该条目不变。实现必须 (MUST) 只在智能体执行成功且精确覆盖了终态成功准则之后，才写入或覆盖 AI 条目。智能体执行成功但最后一次观测是快照或失败的断言时，冷路径必须 (MUST) 不写入任何条目。智能体执行成功但最后一次观测是快照或失败的断言时，回退路径必须 (MUST) 删除引发回退的陈旧条目。智能体执行失败或中止之后，实现必须 (MUST) 保持已有条目不变 (`src/usecases/run.ts:2255-2266`) (`src/usecases/run.ts:2565`)。
 
-元素条目只有在其绑定达到 `confirmed` 时，才可以写入或覆盖，这一点是必须 (MUST) 遵守的。为此，至少有一个步骤必须在自己的非空已提交 `confirms` 列表中列出该元素步骤，并且每个这样的步骤都必须在同一个用例中通过。对于 `element-visible` 的确认断言，只有恰好一个候选匹配时，这次通过才算有效的确认依据。多个匹配的通过不会确认该绑定。只达到 `acted` 的绑定在写回时丢弃，从不持久化 (`src/usecases/run.ts:149-180`) (`src/usecases/run.ts:3472-3495`) (`src/usecases/run.ts:4238-4247`)。
+元素条目只有在绑定达到 `confirmed` 时才可以写入或覆盖，这是必须 (MUST) 遵守的条件。以下任一情况都会使绑定达到 `confirmed`：
+
+- 至少一个步骤在其非空的已提交 `confirms` 列表中列出该元素步骤，且所有这样的步骤都在同一用例中以有效依据通过。`element-visible` 断言只有在恰好一个候选匹配时才提供有效的确认依据。
+- 用例的所有步骤都通过。剩余的 click、press、fill、fill-secret 和 capture 绑定都会确认。其中包括未列在 `confirms` 中的操作，以及 `element-visible` 匹配到多个候选的操作。
+
+用例中途失败或中断时，不得 (MUST NOT) 持久化只达到 `acted` 的绑定。写入文件仍需回写开关允许 (`src/usecases/run.ts:3559-3582`) (`src/usecases/run.ts:3490-3524`) (`src/usecases/run.ts:4431-4437`) (`src/usecases/run.ts:4526-4536`)。
 
 对于每个 `TraceFillSecret`，`secretRef` 必须 (MUST) 属于包含它的执行计划 AI 步骤中已提交的 `secrets[].ref` 集合。违反属于完整性失败，并且不得 (MUST NOT) 回退到智能体执行 (`src/usecases/run.ts:1158`) (`src/usecases/run.ts:1356`)。
 

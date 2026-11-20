@@ -1245,14 +1245,15 @@ The CLI `--strict` flag and the MCP `strict` argument have been removed. Remove 
 
 1. Run `npx ambercast check --json` and confirm that the affected plans report `stale`.
 2. Run `npx ambercast generate <file>` for each stale plan. In the diff, check that each assert lists in its `confirms` the inputs whose effects it shows.
-   - If generate warns `action-unconfirmed` for an input, do not go on to step 3.
-   - A plain run fails on that input with `GROUNDING_UNRESOLVED`.
-   - Add an assert that shows the effect of that input, such as the signed-in user name, and repeat step 2.
+   - The `action-unconfirmed` warning concerns assert quality and does not determine whether replay is possible.
+   - To improve verification, add an assert that shows the input's effect, such as the signed-in user name, and repeat step 2.
 3. Run `npx ambercast run --resolve --update-cache <file>` on your machine. The grounding is empty after regeneration, so ambercast calls AI once for each element step that has no verbatim quote. CI does not save the grounding by default.
 4. Run `npx ambercast check` and confirm that the plan is `fresh`. Then run `npx ambercast run <file>` and confirm that it passes and that `aiCalls` is 0 in the report.
    - Always commit the plan.
    - Commit the grounding with it only when `grounding.repositoryPolicy` is `committed`.
    - When it is `uncommitted`, keep the grounding local.
+
+Earlier versions saved bindings only for actions listed in `confirms`. Now a passing `run --resolve` saves bindings for all actions at completion when write-back is allowed. You can keep asserts added to address warnings in earlier versions; they improve verification quality.
 
 ## Verification \{#verification}
 
@@ -1741,6 +1742,8 @@ Step and review results share these branches.
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
 After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
+
+When every case step passes, `confirmed` is also `true` for the remaining action and capture bindings. This value remains `true` even if write-back is disallowed or fails. It does not guarantee that the grounding file was updated.
 
 Every executed run result and every completed heal result has a `sessions` entry for each target in the plan. Each value is `{ surface: "web", executor: { kind: "playwright", browser: "chromium" }, state }`, where `state` is `not-opened`, `closed`, or `close-failed`. `not-opened` means the target's launch returned no session, including when execution stopped before its first step. A failed close leaves the case status unchanged.
 
@@ -3688,7 +3691,12 @@ A consumer MUST recompute the Plan digest and accept Grounding only when it equa
 
 After successful replay of an existing trace, an implementation MUST leave that entry unchanged. It MUST write or overwrite an AI entry only after successful agentic execution with exact terminal success-criterion coverage. For a successful agentic execution ending in a snapshot or failed assertion, a cold path MUST write no entry. For a successful agentic execution ending in a snapshot or failed assertion, a fallback path MUST delete the stale entry that caused fallback. It MUST leave an existing entry untouched after agentic failure or abort. [src/usecases/run.ts:2255-2266](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L2255-L2266) [src/usecases/run.ts:2565](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L2565)
 
-An element entry MUST be written or overwritten only when its binding reaches `confirmed`. For that, at least one step must name that element step in its own non-empty committed `confirms` list, and every such step must pass in the same case. For an `element-visible` confirming assertion, a pass counts as a valid confirmation basis only when exactly one candidate matches. A pass with multiple matches does not confirm the binding. An `acted`-only binding is discarded at write-back and never persisted. [src/usecases/run.ts:149-180](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L149-L180) [src/usecases/run.ts:3472-3495](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3472-L3495) [src/usecases/run.ts:4238-4247](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L4238-L4247)
+An element entry MUST be written or overwritten only when its binding reaches `confirmed`. A binding reaches `confirmed` through either of two triggers:
+
+- At least one step names the element step in its non-empty committed `confirms` list, and every such step passes in the same case with a valid confirmation basis. An `element-visible` assertion provides a valid basis only when exactly one candidate matches.
+- Every step in the case passes. This confirms all remaining click, press, fill, fill-secret, and capture bindings, including actions absent from `confirms` and actions with multiple `element-visible` matches.
+
+If the case fails or is interrupted before completion, an `acted`-only binding MUST NOT be persisted. File writes remain subject to the write-back gate. [src/usecases/run.ts:3559-3582](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3559-L3582) [src/usecases/run.ts:3490-3524](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3490-L3524) [src/usecases/run.ts:4431-4437](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L4431-L4437) [src/usecases/run.ts:4526-4536](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L4526-L4536)
 
 For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI step's committed `secrets[].ref` set. A violation is an integrity failure and MUST NOT fall back to agentic execution. [src/usecases/run.ts:1158](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L1158) [src/usecases/run.ts:1356](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L1356)
 
@@ -4018,6 +4026,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| Grounding entries for click, press, fill, fill-secret, and capture are also saved when every step in a case passes, subject to write-back permission. The grounding format is unchanged. | `[src/usecases/run.ts:3490-3524](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3490-L3524)`, `[src/usecases/run.ts:4431-4437](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L4431-L4437)` | No migration required. |
 | The provider response adds optional `assumptions`; `ambiguities` means only unresolved target assignment. The producer fingerprint changes, making existing plans stale. | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | Regenerate plans and rebuild grounding using [Re-ground after a producer change](/ambercast/how-to/upgrade/#reground-after-producer-change). |
 | report 3.10 → 3.11 adds `generator-assumption` warnings and optional `warnings` only on `healed` rows for accepted Stage 3 assumptions. Assumptions do not stop generate or heal. Single-target provider ambiguities become retryable `AI_RESPONSE_INVALID` with exit 3; unresolved multi-target assignment remains `PROMPT_AMBIGUOUS` with exit 2. | `repo:src/report/schema.ts`, `repo:src/usecases/generate.ts`, `repo:src/usecases/heal.ts` | Closed-union consumers MUST use the 3.11 schema. See [Upgrade between versions](/ambercast/how-to/upgrade/#reground-after-producer-change). |
 | CLI `--strict` and MCP generate input `strict` are removed. | `repo:src/core/cli/manifest.ts`, `repo:src/adapters/mcp/tool-schemas.ts` | Remove both from calls. `generate --strict` is an unknown option with exit 2; MCP rejects `strict`. See [Upgrade between versions](/ambercast/how-to/upgrade/#reground-after-producer-change). |
@@ -4155,7 +4164,13 @@ Grounding that fails its integrity checks fails closed even with `--resolve`. In
 
 `--resolve` applies to two cases: grounding that is absent, and entries that are structurally valid but recoverable. Grounding written by a retired format version is one of the recoverable cases. For a plan with element-binding steps, `run` reports it as `GROUNDING_UNRESOLVED` without `--resolve`, and `run --resolve --update-cache` regenerates it.
 
-With `--resolve`, an element miss is resolved live. ambercast writes the entry only when every step that confirms the binding passes and the write-back gate allows it. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
+With `--resolve`, an element miss is resolved live. At least one step must list the action in `confirms` to confirm it during the case. ambercast prepares its entry for saving when all such steps pass with a valid confirmation basis.
+
+When every step in the case passes, ambercast also prepares the remaining click, press, fill, fill-secret, and capture entries. This includes actions absent from `confirms` and actions whose `element-visible` assertions matched multiple candidates.
+
+If a case fails or is interrupted before completion, only element entries confirmed through `confirms` qualify for saving. Writing the file requires permission from the write-back gate. The gate depends on `localWriteBack`, `--update-cache`, and `ci.updateGroundingCache`.
+
+After the case passes and grounding is saved successfully, the same plan can replay from the same page state without AI calls. An `ai` step still creates an entry only when it passes with recorded verification. An `ai` step that passes without that record still needs `--resolve` on replay.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#grounding-write-back), [Control grounding write-back](/ambercast/how-to/control-grounding-writeback/)
 

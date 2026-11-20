@@ -19,7 +19,7 @@ import {
   MEMOS_IMAGE, MEMOS_VERSION, HOST, PORT, ADMIN_USERNAME, TIMEOUTS, HarnessError, TerminationUnconfirmedError,
   createExec, createDockerRunner, assertPortFree, createRunRoot, redact, buildChildEnv,
   generateAdminPassword, waitReady, bootstrapAdmin, secretEnvName, buildProjectPackageJson,
-  summarizeAiCalls, createTeardown, reapStale, runProcess, unconfirmedSteps,
+  summarizeAiCalls, createTeardown, reapStale, runProcess,
   signInAdmin, getGeneralSetting, patchAdditionalScript, HEAL_LABEL_SCRIPT,
 } from './lib/memos-harness.mjs';
 
@@ -106,41 +106,14 @@ function assertReadOnlyHealPlan(plan, secretName) {
 }
 
 /**
- * Rejects regenerated plans with uncovered operations before resolve spends AI
- * calls: a plan whose operations no assertion confirms can never persist its
- * bindings, and that is knowable from the plan files alone. The plan files, not
- * generate's warnings, are the evidence, so the check does not depend on how
- * generate's output is displayed. The caller runs it as one unannounced fixture
- * step after generation and before any password or container exists, so a failure
- * leaves fixtures untouched and costs no AI call. The full message reaches stderr
- * through the existing failure handler, so no extra diagnostic is written here.
- * @param projectDir - Isolated generated project's root directory.
- * @param caseIds - Regeneration case ids to inspect in CASES order.
- * @throws {Error} For an uninspectable plan or any uncovered operation.
- */
-function assertCoverage(projectDir, caseIds) {
-  const uncovered = [];
-  for (const id of caseIds) {
-    let steps;
-    try {
-      steps = unconfirmedSteps(JSON.parse(fs.readFileSync(join(projectDir, plan(id)), 'utf8')));
-    } catch (error) {
-      throw new Error(`cannot inspect plan ${id}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    if (steps.length) uncovered.push(`${id}=${steps.join(',')}`);
-  }
-  if (uncovered.length) throw new Error(`unconfirmed steps: ${uncovered.join('; ')}`);
-}
-
-/**
- * Rejects bindings that resolve has not confirmed. Plan coverage is only a
- * necessary condition and a successful resolve exit does not imply promotion, so
- * this reads the saved resolve report before the container is reset, keeping an
- * unpromoted binding from reaching the zero-AI replay or publication. The report
- * shape is verified here because no other stage guarantees it; only a strictly
+ * Checks the saved resolve report for bindings whose `binding.confirmed` is
+ * false before the container is reset, protecting zero-AI replay and publication.
+ * A passing resolve normally confirms these bindings at completion; this
+ * postcondition check catches unconfirmed bindings from cases that did not finish.
+ * The report shape is verified here because no other stage guarantees it; only a strictly
  * false `binding.confirmed` counts, so steps without bindings are ignored.
- * The caller invokes it inside the unannounced resolve step; as with the
- * coverage check, the failure handler already prints the full message.
+ * The caller invokes it inside the unannounced resolve step, whose failure
+ * handler already prints the full message.
  * @param report - Parsed resolve report whose shape must be inspected here.
  * @param prompts - Exact prompt paths passed to resolve for row.file matching.
  * @throws {Error} For invalid report shape or any unconfirmed binding.
@@ -775,7 +748,6 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           // Generate may rewrite the config to settle the consent name. A one-case run
           // never publishes the config, so a changed config would be silently dropped.
           if (sha256(fs.readFileSync(join(root.projectDir, CONFIG))) !== copiedHashes.get(CONFIG)) throw new Error('config changed by generate');
-          assertCoverage(root.projectDir, [only.id]);
           // --plan can carry in a plan generated for another case; every step and the declaration must name the case's target.
           const targets = JSON.parse(fs.readFileSync(join(root.projectDir, plan(only.id)), 'utf8'));
           const names = new Set([...Object.keys(targets.targets ?? {}), ...(targets.steps ?? []).map(step => step.target)]);
@@ -789,7 +761,6 @@ export async function main(argv, platform = process.platform, deps = createDeps(
             if (status !== 'missing-grounding') throw new Error(`--plan does not match the prompt: ${status ?? exitReason(result)}`);
           }
         }, false);
-        else await step('fixture', () => assertCoverage(root.projectDir, selected.map(c => c.id)), false);
       }
       password = generateAdminPassword(deps.randomBytes);
       await startInstance();

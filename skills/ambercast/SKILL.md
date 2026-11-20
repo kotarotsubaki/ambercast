@@ -59,7 +59,7 @@ Structure:
 - Put an exact display requirement in its own assert sentence, with the expected text quoted. Text quoted in an action sentence helps find the element to act on; it does not assert what the next screen displays.
 - Quote text in a success criterion that appears only after the action; text already visible before it, such as the clicked link or button name, cannot confirm the screen changed.
 - Read `generator-assumption` warnings in generate results to decide whether to edit the prompt.
-- If `generate` warns `action-unconfirmed`, no assertion or agentic step confirms that action. Its element binding cannot be cached, so every later `run` of that step needs `--resolve`. When the UI offers something meaningful to check, add a verification sentence after the action.
+- If `generate` warns `action-unconfirmed`, no assertion or agentic step confirms that action. A passing `run --resolve` still saves its element binding when grounding write-back is allowed. The warning concerns assertion quality, not replayability. When the UI offers something meaningful to check, add a verification sentence after the action.
 - Write data preparation as user actions inside the prompt (create the record through the UI before checking it).
 - One file per user story. Put unrelated flows in separate files.
 

@@ -45,7 +45,7 @@ export const CASES = Object.freeze([
   { id: 'memos-sign-in-create-memo', target: 'memos' },
   { id: 'memos-edit-memo', target: 'memos', knownIssue: 632 },
   { id: 'memos-delete-memo', target: 'memos' },
-  { id: 'memos-search-memos', target: 'memos', knownIssue: 632 },
+  { id: 'memos-search-memos', target: 'memos' },
   { id: 'memos-tag-filter', target: 'memos' },
   { id: 'memos-settings-dialog', target: 'memos-readonly' },
   { id: 'memos-ja-locale', target: 'memos-ja' },
@@ -56,7 +56,7 @@ const HEAL_CASE = 'memos-settings-dialog';
  * handwritten guess. An undefined identity stops the heal check with an explicit
  * error before H3 can accept an unrelated grounding failure.
  */
-export const HEAL_STEP_ID = undefined;
+export const HEAL_STEP_ID = 'go-settings';
 const prompt = id => `tests/ambercast/${id}.test.md`;
 const plan = id => `tests/ambercast/${id}.ambercast.plan.json`;
 const grounding = id => `tests/ambercast/${id}.ambercast.grounding.json`;
@@ -569,8 +569,8 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   /**
    * Gate for the heal case of a one-case regeneration, before its plan is published.
    * @throws {Error} For a plan that is not read-only, a settings entry that is not exactly
-   * one unquoted click, or a defined HEAL_STEP_ID that names another step.
-   * @returns The detected settings-entry step id when HEAL_STEP_ID is still undefined
+   * one unquoted click, or a step id in effect that names another step.
+   * @returns The detected settings-entry step id when no step id is in effect
    * (so the caller can tell the maintainer which id to set), otherwise undefined.
    */
   function assertHealPlan() {

@@ -1,0 +1,240 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "a9032eb572746844ea19c8aa62fc41c0cbef98446570b7738e94dac1d53a0d64"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-sign-in",
+      "kind": "action",
+      "target": "memos",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 53,
+          "endLine": 3,
+          "startColumn": 30,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 76,
+          "endLine": 3,
+          "startColumn": 58,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Sign in button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 97,
+            "endLine": 3,
+            "startColumn": 90,
+            "startLine": 3
+          },
+          "text": "Sign in"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 83,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-visible",
+      "intent": {
+        "description": "Save button is displayed after signing in",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 3,
+            "startColumn": 117,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 142,
+          "endLine": 3,
+          "startColumn": 112,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-username",
+        "fill-password",
+        "click-sign-in"
+      ],
+      "id": "assert-username-visible",
+      "kind": "assert",
+      "target": "memos",
+      "text": "verifier"
+    },
+    {
+      "action": "fill",
+      "id": "fill-memo",
+      "intent": {
+        "description": "Memo editor input",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 54,
+          "endLine": 4,
+          "startColumn": 6,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast searchable kiwi"
+    },
+    {
+      "action": "click",
+      "id": "click-save",
+      "intent": {
+        "description": "Save button for the memo",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 70,
+            "endLine": 4,
+            "startColumn": 66,
+            "startLine": 4
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 71,
+          "endLine": 4,
+          "startColumn": 59,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-search",
+      "intent": {
+        "description": "Search button in the sidebar",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 39,
+          "endLine": 5,
+          "startColumn": 1,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "fill",
+      "id": "fill-search",
+      "intent": {
+        "description": "Search box",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 32,
+          "endLine": 6,
+          "startColumn": 6,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "kiwi"
+    },
+    {
+      "action": "press",
+      "id": "press-enter-search",
+      "intent": {
+        "description": "Press Enter in the search box to run the search",
+        "sourceSpan": {
+          "endColumn": 48,
+          "endLine": 6,
+          "startColumn": 37,
+          "startLine": 6
+        }
+      },
+      "key": "Enter",
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-memo",
+        "click-save",
+        "click-search",
+        "fill-search",
+        "press-enter-search"
+      ],
+      "id": "assert-memo-found",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast searchable kiwi"
+    }
+  ],
+  "targets": {
+    "memos": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "surface": "web"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "entries": {
+    "click-sign-in": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "973e5607f78bcfa61279d33f3380b0fbc7e956270be9005a47d03bc2781a6332"
+      },
+      "intentDigest": "af8139ab479d939b0baffbf99b82a33378e2a28dc7837cb321d570de7bd7adaa",
+      "kind": "element",
+      "locator": {
+        "name": "サインイン",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "fill-password": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "b633df0c4234b880efcb5521d1c1b62c2b12d67ae938940fdf53470afa9496b1"
+      },
+      "intentDigest": "36c2ceaf82516a4b104d7a5dc7681df36ab4b3b623ccbe70961d91225a3d3e81",
+      "kind": "element",
+      "locator": {
+        "name": "パスワード",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "9aace5a110cf130ebd50a0eb45712b92a43c02ad748a905f65431cc5125c05be"
+      },
+      "intentDigest": "19ac394a246a54bc9a03bcf2971fcdfc63b911c634546f746f416e56fba6b91b",
+      "kind": "element",
+      "locator": {
+        "name": "ユーザーネーム",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    }
+  },
+  "planDigest": "b1efc31468cce48a3e3dc66030e339b1e691d0efadf16818c66a7f4c4412b093",
+  "schemaVersion": 4
+}

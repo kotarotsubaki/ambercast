@@ -1250,8 +1250,8 @@ describe('main one-case regeneration', () => {
       expect(await run(f, argv)).toBe(1); fail(f, 'fixture', '0');
       expect(last(f)).toContain('HEAL_STEP_ID other-step not found; update the constant to settings-entry'); expect(publishedRenames(f)).toEqual([]);
     });
-    it('TEST-ONE-13 publishes and prints the detected id when HEAL_STEP_ID is undefined', async () => {
-      const f = heal(); (f.deps as { healStepId?: string | undefined }).healStepId = undefined;
+    it('TEST-ONE-13 publishes and prints the detected id when no step id is in effect', async () => {
+      const f = heal(); (f.deps as { healStepId?: string | undefined }).healStepId = '';
       expect(await run(f, argv)).toBe(0);
       expect(f.err()).toContain('verify-memos: settings-entry step id: settings-entry; set HEAL_STEP_ID');
       expect(publishedRenames(f)).toEqual([healPlan, healGrounding]);

@@ -20,18 +20,18 @@
     "preview:blocks": "node scripts/preview-blocks.mjs"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "7.3.5",
-    "@astrojs/mdx": "8.1.2",
-    "@astrojs/starlight": "0.42.8",
-    "astro": "7.4.5",
+    "@astrojs/markdown-remark": "7.3.9",
+    "@astrojs/mdx": "8.1.6",
+    "@astrojs/starlight": "0.43.1",
+    "astro": "7.4.12",
     "github-slugger": "2.0.0",
     "js-yaml": "^4.3.2"
   },
   "devDependencies": {
-    "@expressive-code/plugin-collapsible-sections": "0.44.3",
-    "@expressive-code/plugin-line-numbers": "0.44.3",
+    "@expressive-code/plugin-collapsible-sections": "0.44.4",
+    "@expressive-code/plugin-line-numbers": "0.44.4",
     "@textlint-ja/textlint-rule-preset-ai-writing": "1.7.0",
-    "textlint": "15.8.0",
+    "textlint": "16.1.1",
     "textlint-plugin-mdx": "1.1.0",
     "textlint-rule-preset-ja-technical-writing": "12.0.2",
     "zhlint": "0.8.2"

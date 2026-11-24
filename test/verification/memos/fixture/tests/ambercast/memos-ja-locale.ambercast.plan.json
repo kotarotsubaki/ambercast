@@ -1,0 +1,148 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "d575d549ac45aa5654333bb26236d4aa5d95bade7a1663f3ece9be7e84c4da3d"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-sign-in",
+      "kind": "action",
+      "target": "memos-ja",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "check": "element-visible",
+      "id": "assert-sign-in-button",
+      "intent": {
+        "description": "The \"サインイン\" button on the sign-in page is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 46,
+            "endLine": 3,
+            "startColumn": 41,
+            "startLine": 3
+          },
+          "text": "サインイン"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 54,
+          "endLine": 3,
+          "startColumn": 36,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos-ja"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input field",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 79,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos-ja",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input field",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 121,
+          "endLine": 3,
+          "startColumn": 107,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos-ja"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Click the \"サインイン\" button to sign in",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 140,
+            "endLine": 3,
+            "startColumn": 135,
+            "startLine": 3
+          },
+          "text": "サインイン"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 141,
+          "endLine": 3,
+          "startColumn": 128,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos-ja"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-button",
+      "intent": {
+        "description": "The \"Save\" button is displayed after signing in",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 164,
+            "endLine": 3,
+            "startColumn": 160,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 172,
+          "endLine": 3,
+          "startColumn": 155,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos-ja"
+    }
+  ],
+  "targets": {
+    "memos-ja": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "ja-JP",
+      "surface": "web"
+    }
+  }
+}

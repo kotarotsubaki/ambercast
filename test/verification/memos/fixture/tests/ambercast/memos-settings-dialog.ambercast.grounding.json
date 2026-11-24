@@ -1,0 +1,104 @@
+{
+  "entries": {
+    "click-cancel": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "fc04ba8d5b0d1deacf419d6e5aa5f67a5965c42aad4f0353eeaf9411f07901b5"
+      },
+      "intentDigest": "42ce48545be0a641ad549925bade63db21911e5b76332431d65e8e6617498aab",
+      "kind": "element",
+      "locator": {
+        "name": "Cancel",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-sign-in": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "3216f02a2bd4aebe457b7c25d6a8be79f1fcedc2f701d6ad4db0b4615f6d94e0"
+      },
+      "intentDigest": "463e0bd31bacb9d23cfd35a4e4bc73582a2dee5af06afbe80c60ec123aa65f32",
+      "kind": "element",
+      "locator": {
+        "name": "Sign in",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "fill-password": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "5ddd8e6bb92aff820daac95456998be29d4ea9d7cc94a4543d9e31e3cbecd52a"
+      },
+      "intentDigest": "afe440869c3c091de2e23a43bc469357dd172707e2c6e8bc55b4a8eb48ee21ba",
+      "kind": "element",
+      "locator": {
+        "name": "Password",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "f34378aac0c5e319f78db6becf67f1636d116c38dca19b7b00860b37d10e85d0"
+      },
+      "intentDigest": "9299c76d61f9dccd71acadfe19c7401611fe60314c76c815d7f8af6fce80938d",
+      "kind": "element",
+      "locator": {
+        "name": "Username",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "go-settings": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "ad705c6f6a6fbf7a06a00f5bf377461369176d1e35f40be680035051d4713a98"
+      },
+      "intentDigest": "ca8be40ff39b97d13fed25f840a138b7b37ffd9ff70621a10eaff9eee599713b",
+      "kind": "element",
+      "locator": {
+        "name": "Settings",
+        "role": "menuitem",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "open-edit-dialog": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "987688d2892d0160f20dd8a1892cebe3a91998e0a03dcdb67c1b1b9fec1a8b24"
+      },
+      "intentDigest": "5a6b6dd54459d58f621bd11a4672c3216f5e9c4c84cef09d25a77f9778de5dc5",
+      "kind": "element",
+      "locator": {
+        "name": "Edit",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "open-user-menu": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "bb0721e0f24a66dc6e1ae8fb406450ae701715acd7af1fb4beb6d1b29d87b4af"
+      },
+      "intentDigest": "3c682e294212f805956413a279608cf7118d58070d6dbcbf392aedf0a069d2d6",
+      "kind": "element",
+      "locator": {
+        "name": "verifier, More",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    }
+  },
+  "planDigest": "994c7b0a5e0c1d04559c323237f568afa0fb3f6ded61f2c0440aa30ce2cb7b13",
+  "schemaVersion": 4
+}

@@ -1,0 +1,282 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "00f86c780d432c2150aae53c476cb450af8008f76dbadb9afc2d26323cd91b94"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-signin",
+      "kind": "action",
+      "target": "memos-readonly",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input field on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 53,
+          "endLine": 3,
+          "startColumn": 24,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input field on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 76,
+          "endLine": 3,
+          "startColumn": 58,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos-readonly"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Sign in button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 97,
+            "endLine": 3,
+            "startColumn": 90,
+            "startLine": 3
+          },
+          "text": "Sign in"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 83,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-button",
+      "intent": {
+        "description": "Save button is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 3,
+            "startColumn": 117,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 143,
+          "endLine": 3,
+          "startColumn": 100,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos-readonly"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-username",
+        "fill-password",
+        "click-sign-in"
+      ],
+      "id": "assert-verifier-text",
+      "kind": "assert",
+      "target": "memos-readonly",
+      "text": "verifier"
+    },
+    {
+      "action": "click",
+      "id": "open-user-menu",
+      "intent": {
+        "description": "The \"verifier, More\" menu in the sidebar",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 25,
+            "endLine": 4,
+            "startColumn": 11,
+            "startLine": 4
+          },
+          "text": "verifier, More"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 31,
+          "endLine": 4,
+          "startColumn": 1,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly"
+    },
+    {
+      "action": "click",
+      "id": "go-settings",
+      "intent": {
+        "description": "Settings entry in the opened menu that leads to the settings page",
+        "sourceSpan": {
+          "endColumn": 75,
+          "endLine": 4,
+          "startColumn": 51,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly"
+    },
+    {
+      "action": "click",
+      "id": "open-edit-dialog",
+      "intent": {
+        "description": "Edit button that opens the dialog",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 15,
+            "endLine": 5,
+            "startColumn": 11,
+            "startLine": 5
+          },
+          "text": "Edit"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 23,
+          "endLine": 5,
+          "startColumn": 1,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "open-edit-dialog"
+      ],
+      "id": "assert-heading-visible",
+      "intent": {
+        "description": "Update Information heading is displayed in the dialog",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 63,
+            "endLine": 5,
+            "startColumn": 45,
+            "startLine": 5
+          },
+          "text": "Update Information"
+        },
+        "roleHint": "heading",
+        "sourceSpan": {
+          "endColumn": 85,
+          "endLine": 5,
+          "startColumn": 28,
+          "startLine": 5
+        }
+      },
+      "kind": "assert",
+      "target": "memos-readonly"
+    },
+    {
+      "action": "click",
+      "id": "click-cancel",
+      "intent": {
+        "description": "Cancel button that closes the dialog",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 5,
+            "startColumn": 115,
+            "startLine": 5
+          },
+          "text": "Cancel"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 122,
+          "endLine": 5,
+          "startColumn": 92,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos-readonly"
+    },
+    {
+      "check": "element-count",
+      "confirms": [
+        "click-cancel"
+      ],
+      "count": 0,
+      "id": "assert-heading-gone",
+      "intent": {
+        "description": "Update Information heading is no longer displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 159,
+            "endLine": 5,
+            "startColumn": 141,
+            "startLine": 5
+          },
+          "text": "Update Information"
+        },
+        "roleHint": "heading",
+        "sourceSpan": {
+          "endColumn": 191,
+          "endLine": 5,
+          "startColumn": 124,
+          "startLine": 5
+        }
+      },
+      "kind": "assert",
+      "target": "memos-readonly"
+    }
+  ],
+  "targets": {
+    "memos-readonly": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "surface": "web"
+    }
+  }
+}

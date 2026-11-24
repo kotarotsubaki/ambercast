@@ -298,7 +298,7 @@ describe('memos verification wiring', () => {
       'Type "ambercast tagged memo #ambercasttag" into the memo editor and click "Save".',
       'Click the tag "ambercasttag" in the tag list. Assert that the text "ambercast tagged memo" is displayed.'],
     ['memos-settings-dialog', '# Open a settings dialog',
-      'Open the user menu in the sidebar and go to the settings page.',
+      'Open the "<user menu>" menu in the sidebar and go to the settings page.',
       'Open the "<open>" dialog and assert that the "<heading>" heading is displayed. Then close the dialog with "<Cancel>".'],
     ['memos-ja-locale', '# Use Memos in Japanese',
       'Open the sign-in page. Assert that the "サインイン" button is displayed. Enter the username "verifier" and the saved password, then click "サインイン". Assert that the "Save" button is displayed.'],

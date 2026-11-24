@@ -1,0 +1,118 @@
+{
+  "entries": {
+    "click-save": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "0e90cdba83d2fae86e85a5c19ffa2d78267b11db4fade702efa5f4f217e92bfe"
+      },
+      "intentDigest": "ef75462caf20316e403457920bf872a2cd3164c6aaa704345ae48b34b7eafb33",
+      "kind": "element",
+      "locator": {
+        "name": "Save",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-search": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "1a0c9bbc86a52292162c0fe252bfc45dec194b1341c331b180e8fca6c3290691"
+      },
+      "intentDigest": "131b4f0ece9603890eb44e677c536aa03103f8b4fc22f843d8ab2cea51c1c108",
+      "kind": "element",
+      "locator": {
+        "name": "Search",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "click-sign-in": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "3216f02a2bd4aebe457b7c25d6a8be79f1fcedc2f701d6ad4db0b4615f6d94e0"
+      },
+      "intentDigest": "463e0bd31bacb9d23cfd35a4e4bc73582a2dee5af06afbe80c60ec123aa65f32",
+      "kind": "element",
+      "locator": {
+        "name": "Sign in",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "fill-memo": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "37158f5623311a6cae9424551667e5be5276a32b37010cb90eaefeca264aec55"
+      },
+      "intentDigest": "ad94cbea0067bd5c75a79bb8c891ecabab2caf668636fb34f87577f13ca9c34a",
+      "kind": "element",
+      "locator": {
+        "name": "",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-password": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "5ddd8e6bb92aff820daac95456998be29d4ea9d7cc94a4543d9e31e3cbecd52a"
+      },
+      "intentDigest": "5ab0808f4a2b30a8078324ddd36d1aa33c28c8a838c87207c328b2de91ebc70d",
+      "kind": "element",
+      "locator": {
+        "name": "Password",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-search": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "95241027e7a2d649c3aa38c2dc065bfbd0fa5cf0a27a12436891149c7a8c941e"
+      },
+      "intentDigest": "31ec798a76b784eb2a2eae31665b7792908e6ed69127cee4bf30d9d3433a7915",
+      "kind": "element",
+      "locator": {
+        "name": "Search Memos",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "f34378aac0c5e319f78db6becf67f1636d116c38dca19b7b00860b37d10e85d0"
+      },
+      "intentDigest": "877555dab9c887460828689ec19f0dcab59854a35f17e61d0b5b2d073a7063f5",
+      "kind": "element",
+      "locator": {
+        "name": "Username",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "press-enter-search": {
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "95241027e7a2d649c3aa38c2dc065bfbd0fa5cf0a27a12436891149c7a8c941e"
+      },
+      "intentDigest": "fd66186d6a2a37e048e3ec205fba1a3922f4e22fa896a182a40d971f928b455c",
+      "kind": "element",
+      "locator": {
+        "name": "Search Memos",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    }
+  },
+  "planDigest": "6c07d4d78ff0c14c8af995a600ca2ae45e76bd0b011e1a4491f15438e91990a3",
+  "schemaVersion": 4
+}

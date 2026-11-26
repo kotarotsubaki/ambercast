@@ -38,7 +38,7 @@ const LOCALE_DEMO_LABELS = {
 };
 const capabilityPagesMapping = await readCapabilityPages(fileURLToPath(new URL('../../src/data/capability-pages.json', import.meta.url)));
 const PLANNED_PAGES = plannedPageSlugs(capabilityPagesMapping);
-const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'resolve', 'grounding-write-back', 'report-and-exits'];
+const RUN_H2_IDS = ['flags', 'replay', 'ai-calls', 'resolve', 'grounding-write-back', 'report-and-exits', 'changing-neighbor-text'];
 const PACKAGE_VERSION = JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')).version;
 
 const APPROVED_EXTERNAL_SITE_URLS = [

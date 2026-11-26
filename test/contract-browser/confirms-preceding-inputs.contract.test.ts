@@ -96,7 +96,7 @@ ${scenario.name === 'N1' ? '<button type="button">Sign out</button>' : ''}
       assertDiagnosable(firstReport.envelope);
       const persistedText = await deps.storage.readText(groundingPath);
       const grounding = GroundingDocument.parse(JSON.parse(persistedText));
-      expect(grounding.schemaVersion).toBe(4);
+      expect(grounding.schemaVersion).toBe(5);
       expect(Object.keys(grounding.entries).sort()).toEqual([...scenario.operations].sort());
       for (const id of scenario.operations) {
         expect(grounding.entries[id]).toMatchObject({ kind: 'element', provenance: id === 'click-sign-in' ? 'quoted-match' : 'ai-proposed' });

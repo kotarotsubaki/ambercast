@@ -47,7 +47,7 @@ describe('Issue #596 TEST-11 unnamed textbox grounding against real Chromium', (
       const groundingPath = deps.layout.groundingPathFor(testPath);
       const persistedText = await deps.storage.readText(groundingPath);
       const grounding = GroundingDocument.parse(JSON.parse(persistedText));
-      expect(grounding.schemaVersion).toBe(4);
+      expect(grounding.schemaVersion).toBe(5);
       expect(grounding.entries['fill-memo']).toMatchObject({ kind: 'element', locator: { strategy: 'accessibility', role: 'textbox', name: '' } });
       duplicateScreen = duplicate;
       const second = await run(browserDeps, { ...DEFAULT_OPTIONS, resolve: false });

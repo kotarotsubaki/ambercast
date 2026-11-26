@@ -17,15 +17,19 @@ const sentinel = 'never-disclose-this-neighbor-replay-contract-secret';
 
 // A fresh document gets a fresh name, without a timer that could change it
 // between binding and the pre-action check. The other neighbor is independent.
+// The result text is written synchronously with the input: the target resolves
+// with a zero timeout, so the confirming assertion observes the page once and
+// must not race a network round trip. The POST only tells the test server that
+// the fill happened.
 const pageHtml = (stableName = 'Keep memo') => `<!doctype html><html lang="en"><body>
 <div role="group" aria-label="Memo editor"><button id="load-name"></button><div contenteditable="true" role="textbox"></div><button>${stableName}</button></div>
 <p id="result"></p><script>
 document.getElementById('load-name').textContent = 'Loaded ' + crypto.randomUUID();
 window.__events = [];
-document.querySelector('[contenteditable]').addEventListener('input', async () => {
+document.querySelector('[contenteditable]').addEventListener('input', () => {
   window.__events.push('input');
-  await fetch('/input', { method: 'POST', body: JSON.stringify(window.__events) });
   document.getElementById('result').textContent = 'Memo saved';
+  fetch('/input', { method: 'POST', body: JSON.stringify(window.__events) });
 });
 </script></body></html>`;
 
@@ -96,6 +100,11 @@ async function scenario() {
           errors: report.envelope.errors,
           steps: outcome.results[0]?.result.steps,
         })).toBe('passed');
+      }
+      // The page does not await its POST, so a run that filled the field is not over until the server has seen it;
+      // otherwise a late request would be recorded under the next run.
+      if (outcome.results[0]?.result.steps.find(step => step.id === 'fill-memo')?.status === 'passed') {
+        await vi.waitFor(() => expect(actions).toContain('fill'));
       }
       assertDiagnosable(report.envelope);
       if (!resolve) {
@@ -179,7 +188,8 @@ describe('neighbor-name replay against real Chromium', () => {
     try {
       await f.learnChangedNeighbor();
       const replay = await f.execute(false);
-      expect(f.actions).toEqual(['live-hit', 'fill']);
+      // The POST is not awaited by the page, so wait for it to reach the server.
+      await vi.waitFor(() => expect(f.actions).toEqual(['live-hit', 'fill']));
       expect(replay.outcome.results[0]?.result.steps.find(step => step.id === 'fill-memo'))
         .toMatchObject({ status: 'passed', binding: { provenance: 'grounding', ignoredNames: ['siblingBefore'] } });
       expect(replay.outcome.results[0]?.result.steps.find(step => step.id === 'confirm-memo')).toMatchObject({ status: 'passed' });

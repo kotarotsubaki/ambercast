@@ -282,7 +282,9 @@ describe('neighbor-name disclosure boundary', () => {
     const f = await fixture();
     const { built, row } = await f.execute(resolve);
     const roots = [f.deps.layout.planPathFor(f.path), f.groundingPath];
-    if (await f.deps.storage.exists(RUNS_DIR)) roots.push(RUNS_DIR);
+    // `exists` reports regular files only, so the run directory is detected through its listings; the collector rejects an empty root.
+    const runEntries = (await f.deps.storage.listFiles(RUNS_DIR)).length + (await f.deps.storage.listDirectories(RUNS_DIR)).length;
+    if (runEntries > 0) roots.push(RUNS_DIR);
     const artifacts = await collectStorageArtifacts(f.deps.storage, roots);
     assertNoSecretDisclosure({ secrets: { credential: SECRET }, report: built.envelope, artifacts });
     // Existing failure evidence can contain the page; the added structured fields cannot.

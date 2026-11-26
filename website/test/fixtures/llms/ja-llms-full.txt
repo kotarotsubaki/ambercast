@@ -2065,7 +2065,7 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 | `UNEXPECTED_CRASH` | 許可リストに含まれる原因名。 |
 | `EXECUTOR_UNSUPPORTED` | ターゲット、実行器、理由（`surface-mismatch` または `capability-missing`）、不足している機能、任意でサーフェス。 |
 | `PROMPT_PATH_INVALID` | パスと理由（`outside-test-dir`、`not-test-md`、`no-name` のいずれか）。 |
-| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 回復可能な指紋の不一致には `difference` と `changedNames` も付く。 |
+| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 回復可能な指紋の不一致には `difference` が付くことがあり、`difference` が `neighbor-names` のときは `changedNames` も付く。 |
 
 ## 関連項目 {#see-also}
 
@@ -3027,7 +3027,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 
 ## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
 
-保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は、その実行で変わっていた隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
 
 v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
 
@@ -4466,7 +4466,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 
 ## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
 
-保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は、その実行で変わっていた隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
 
 v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
 

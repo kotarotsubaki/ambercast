@@ -2063,7 +2063,7 @@ Only the codes below carry `details`. See [Reports](/ambercast/reference/reports
 | `UNEXPECTED_CRASH` | An allowlisted cause name. |
 | `EXECUTOR_UNSUPPORTED` | The target, the executor, the reason (`surface-mismatch` or `capability-missing`), the missing capabilities, and optionally the surface. |
 | `PROMPT_PATH_INVALID` | The path and the reason (`outside-test-dir`, `not-test-md`, or `no-name`). |
-| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). Initial target-selection failures also include applicable optional fields: `proposalOutcome`, `proposalRole`, `proposalName`, `proposalMatchCount`, `rejection`, and `verification`. See [Reports](/ambercast/reference/reports/#errors) for each field's conditions. Recoverable fingerprint misses can also include `difference` and `changedNames`. |
+| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). Initial target-selection failures also include applicable optional fields: `proposalOutcome`, `proposalRole`, `proposalName`, `proposalMatchCount`, `rejection`, and `verification`. See [Reports](/ambercast/reference/reports/#errors) for each field's conditions. Recoverable fingerprint misses can also include `difference`, and `changedNames` when the difference is `neighbor-names`. |
 
 ## See also {#see-also}
 
@@ -3017,7 +3017,7 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
-Rerun `ambercast run --resolve`; once ambercast writes the result back, neighboring text no longer stops this element.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that run saw changing no longer stop this element.
 This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 
@@ -4434,7 +4434,7 @@ Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading struct
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
-Rerun `ambercast run --resolve`; once ambercast writes the result back, neighboring text no longer stops this element.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that run saw changing no longer stop this element.
 This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 

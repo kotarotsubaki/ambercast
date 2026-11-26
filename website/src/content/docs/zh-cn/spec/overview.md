@@ -38,7 +38,7 @@ description: "本规范描述了 ambercast 0.10.0 接受的工件。"
 | 执行计划的 `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | 定位缓存的 `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | 指纹算法 | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.13` | `src/report/schema.ts:58` |
 
 ## 阅读顺序 {#reading-order}
 

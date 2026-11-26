@@ -1295,6 +1295,10 @@ function caseOutcome(
     id: file,
     file,
     planFile,
+    // Replay binding ignoredNames survives this projection on every step
+    // that carries them, including stored hits and newly decided exclusions.
+    // Run's neighbor-name notices are not copied: heal exposes the binding
+    // evidence without claiming which exclusions this repair newly persisted.
     steps: measurement.replay.result.steps,
     sessions: measurement.replay.result.sessions,
     explanation: measurement.replay.result.explanation,

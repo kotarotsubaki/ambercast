@@ -11,7 +11,7 @@ Replay reuses what ambercast recorded. Where the record is missing or unusable, 
 
 An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [Grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
-The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. A mismatch is never treated as a hit. `snapshot-invalid` and `secret-contaminated` abort the case.
+The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. Saved ignored slots permit the bounded match described below. `snapshot-invalid` and `secret-contaminated` abort the case.
 
 Replay then follows one of four paths:
 
@@ -26,7 +26,7 @@ Related: [Grounding document](/ambercast/spec/grounding-document/), [Element fin
 
 A covered, valid AI trace replays without resolving an AI executor. Replay takes this path before it considers any agentic fallback.
 
-When an element resolves as a hit, replay passes the stored fingerprint along and requests no new resolution. A complete cache runs without probing a provider, and a hit emits no AI-call event.
+When an element resolves as a hit, replay uses the complete fingerprint observed in this run and requests no new resolution. A complete cache runs without probing a provider, and a hit emits no AI-call event.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#replay), [Determinism in CI](/ambercast/explanation/determinism-in-ci/#bounded-side-effects)
 
@@ -53,6 +53,17 @@ Without `--resolve`, `run` resolves neither a cold-start miss nor a recoverable 
 An element miss fails closed in the same way, with exit 4, instead of resolving the element live.
 
 Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
+
+## Text that changes between runs {#changing-neighbor-text}
+
+With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once; rerun `ambercast run --resolve`, and after write-back, this element replays without AI.
+This applies to targets with or without an accessible name.
+
+Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.
+
+Structure changes, including neighboring elements appearing or disappearing, remain mismatches and are never relaxed. Replays without permission to resolve never add ignored slots. Immediately before acting, ambercast still compares the complete fingerprint from this run, including ignored names.
+
+Check that the page shows the expected record before resolving a text change. The [report](/ambercast/reference/reports/#neighbor-name-warnings) identifies newly ignored slots and whether ambercast saved them.
 
 ## Handing drift over {#drift-handoff}
 

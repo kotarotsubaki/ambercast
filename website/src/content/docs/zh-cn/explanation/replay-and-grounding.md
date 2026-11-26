@@ -11,7 +11,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
 回放随后走以下四条路径之一：
 
@@ -26,7 +26,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 已覆盖且有效的 AI 轨迹无需解析 AI 执行器即可回放。回放会先走这条路径，再考虑任何代理式回退。
 
-元素解析命中时，回放直接使用保存的指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
+元素解析命中时，回放使用本次观测到的完整指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)、[CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
 
@@ -53,6 +53,16 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 元素未命中同样失败关闭，退出码为 4，不会实时解析元素。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+
+## 每次回放都变化的邻近文字 {#changing-neighbor-text}
+
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，后续回放该元素无需 AI。目标是否有无障碍名称都适用。
+
+v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
+
+邻近元素出现或消失等结构变化仍为不匹配，不会放宽匹配。不允许 resolve 的回放不会添加忽略槽位。操作前，ambercast 仍比较本次回放的完整指纹，包括忽略的名称。
+
+resolve 文字变化前，先确认页面显示的是预期记录。[报告](/ambercast/zh-cn/reference/reports/#neighbor-name-warnings)说明本次新增的忽略槽位及保存结果。
 
 ## 漂移的移交 {#drift-handoff}
 

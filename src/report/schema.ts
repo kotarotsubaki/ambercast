@@ -52,10 +52,11 @@ const UiCapability = z.enum([
 /**
  * Version shared by every structured report envelope.
  *
- * Version 3.12 adds optional replay readiness and execution diagnostics while
- * retaining compatibility with results that omit the new fields.
+ * New report emission and the public JSON Schema accept only this version.
+ * Persisted older reports remain reader concerns: the lenient
+ * run-report path preserves their evidence without inventing missing fields.
  */
-export const REPORT_SCHEMA_VERSION = '3.12' as const;
+export const REPORT_SCHEMA_VERSION = '3.13' as const;
 /**
  * Fixed disclaimer required on accessibility evidence in a structured report.
  *
@@ -273,6 +274,30 @@ export const SecretSyntaxRejectedDetails = z.strictObject({
 });
 /** Optional retry history for an unavailable AI executor. */
 export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAttempts.optional() });
+
+/** Nonempty, unique neighbor slots in their public reporting order. */
+export const NeighborNameSlots = z.union([
+  z.tuple([z.literal('parent')]),
+  z.tuple([z.literal('siblingBefore')]),
+  z.tuple([z.literal('siblingAfter')]),
+  z.tuple([z.literal('parent'), z.literal('siblingBefore')]),
+  z.tuple([z.literal('parent'), z.literal('siblingAfter')]),
+  z.tuple([z.literal('siblingBefore'), z.literal('siblingAfter')]),
+  z.tuple([z.literal('parent'), z.literal('siblingBefore'), z.literal('siblingAfter')]),
+]);
+export type NeighborNameSlots = z.infer<typeof NeighborNameSlots>;
+
+/** Optional diagnostic values for a stored-grounding verification miss. */
+export interface GroundingDifferenceDetails {
+  readonly verification?: GroundingMissReason;
+  readonly difference?: 'neighbor-names' | 'structure';
+  readonly changedNames?: NeighborNameSlots;
+}
+
+/** Binding evidence shared by replay and healing step results. */
+export interface IgnoredNamesBindingFields {
+  readonly ignoredNames?: NeighborNameSlots;
+}
 /**
  * Identifies the step and reason for an unresolved binding. Reasons distinguish
  * first-binding failures during quote-match polling, AI proposal evaluation,
@@ -281,6 +306,15 @@ export const AiExecutorUnavailableDetails = z.strictObject({ attempts: ReportAtt
  * case owns which fields accompany each stop point; the schema validates
  * individual values without constraining their combinations. Proposal names
  * may be empty because unnamed accessible elements are valid candidates.
+ *
+ * Verification also describes recoverable misses. Difference is present only
+ * for a known fingerprint mismatch, with changedNames only for neighbor-name
+ * differences; candidate-changed retains its existing evidence.
+ * Run owns those combinations because only its stop point establishes which
+ * evidence applies. This boundary validates individual values rather than
+ * duplicating execution policy. Inapplicable keys are absent,
+ * never placeholders. New diagnostics contain only enumerated values and step
+ * identifiers, never screen text or secrets.
  */
 export const GroundingUnresolvedDetails = z.strictObject({
   stepId: z.string(),
@@ -291,6 +325,8 @@ export const GroundingUnresolvedDetails = z.strictObject({
   proposalMatchCount: z.int().nonnegative().optional(),
   rejection: z.enum(['not-unique', 'snapshot-invalid', 'fingerprint-unavailable', 'role-mismatch']).optional(),
   verification: z.enum(['fingerprint-mismatch', 'element-not-found', 'ambiguous-match', 'snapshot-invalid', 'secret-contaminated']).optional(),
+  difference: z.enum(['neighbor-names', 'structure']).optional(),
+  changedNames: NeighborNameSlots.optional(),
 });
 /** Type-only parity keeps report validation aligned without importing core runtime values. */
 type GroundingMissReason = import('#core/errors/grounding-miss-reason.js').GroundingMissReason;
@@ -582,12 +618,16 @@ export const StepResult = z.strictObject({
    * run (it does not mean the entry was written in this run); for `quoted-match`
    * and `ai-proposed` it is the value at case end, even when a later confirming
    * step flips it. Stage timings appear only if each ran.
+   * Ignored slots appear on every binding that has them, including stored
+   * hits and newly decided exclusions, and survive projection into heal results.
+   * They expose slot identities, never the text that caused the exclusion.
    */
   binding: z.strictObject({
     provenance: z.enum(['grounding', 'quoted-match', 'ai-proposed']),
     confirmed: z.boolean(),
     quoteWaitMs: z.int().nonnegative().optional(),
     aiProposalMs: z.int().nonnegative().optional(),
+    ignoredNames: NeighborNameSlots.optional(),
   }).optional(),
 }).superRefine((step, context) => {
   if (step.type !== 'capture' && step.variable !== undefined) {
@@ -675,6 +715,19 @@ export const AssertHeldBeforeActionsWarning = z.strictObject({
 /** Advisory evidence that a passing assertion may not verify preceding actions. */
 export type AssertHeldBeforeActionsWarning = z.infer<typeof AssertHeldBeforeActionsWarning>;
 
+/** Advisory evidence of newly excluded neighbor names on a confirmed entry. */
+export const NeighborNameIgnoredWarning = z.strictObject({
+  kind: z.literal('neighbor-name-ignored'),
+  stepId: StepId,
+  names: NeighborNameSlots,
+  saved: z.boolean(),
+});
+export type NeighborNameIgnoredWarning = z.infer<typeof NeighborNameIgnoredWarning>;
+
+// Structural slot alternatives preserve the same constraints in runtime and
+// public JSON Schema validation; refinements would weaken the public contract.
+// Notices are advisory and do not change verdicts or exit codes.
+
 const ExecutedResultFields = {
   durationMs: NonNegativeInteger,
   // The dispatch boundary increments this independently of events so
@@ -730,7 +783,7 @@ export const ExecutedRunResult = z.strictObject({
    * Kept run-only because heal rows omit observation and retain their own
    * generator-assumption warnings on adopted repairs.
    */
-  warnings: z.array(AssertHeldBeforeActionsWarning).optional(),
+  warnings: z.array(z.discriminatedUnion('kind', [AssertHeldBeforeActionsWarning, NeighborNameIgnoredWarning])).optional(),
 });
 
 /**

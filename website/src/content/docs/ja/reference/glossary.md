@@ -142,3 +142,15 @@ description: ambercast 全体で使う用語の規範的な定義と、翻訳で
 - [JSON スキーマ](/ambercast/ja/reference/json-schemas/)
 - [環境変数](/ambercast/ja/reference/environment-variables/)
 - [MCP ツール](/ambercast/ja/reference/mcp-tools/)
+
+## 成分 {#components}
+
+`components` は指紋を、構造のハッシュと、親および直前・直後の兄弟の名前のハッシュに分ける。構造は対象のロールと名前、隣接するロール、兄弟の有無を含む。
+
+## 除外する名前とスロット {#ignored-names}
+
+`ignoredNames` は実行をまたぐ比較から除外する名前のスロットを列挙する。スロットは `parent`、`siblingBefore`、`siblingAfter` である。対象の名前と、操作直前の完全な指紋の比較は除外しない。
+
+## 違いの種類 {#difference-kind}
+
+`difference` は成分のある指紋の不一致を分類する。`neighbor-names` は除外していない隣の名前のハッシュだけが異なり、`structure` は構造のハッシュが異なることを表す。成分がなければ、この分類を省く。

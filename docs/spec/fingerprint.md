@@ -39,7 +39,9 @@ Generation checks every descriptor role and name for secret contamination before
 
 Verification and pre-action re-verification retain their existing checks; they add no secret-contamination rejection. [repo:src/core/ir/fingerprint.ts:343-448]
 
-Matching MUST compare the complete fingerprint even when an entry contains `components` or `ignoredNames`. The current implementation never writes `ignoredNames`.
+Matching without `ignoredNames` MUST compare the complete fingerprint. With `ignoredNames`, matching MUST compare `structure` and every non-ignored slot's name hash. All three slots can be ignored; then only `structure` is compared.
+
+Immediately before acting, ambercast MUST compare the complete fingerprint observed when binding in this run. This check includes ignored slots; a change after binding still prevents the action.
 
 ## Digest {#digest}
 
@@ -53,7 +55,17 @@ In `check`, grounding inspection classifies a schema-invalid companion as `inval
 
 ## Matching {#matching}
 
-A fingerprint mismatch MUST be treated as a miss, never as evidence that the old element is safe to replay. This follows the implemented version gate and mismatch invalidation. [repo:src/core/ir/schema.ts:320] [repo:src/core/ir/fingerprint.ts:436]
+A fingerprint mismatch MUST be treated as a miss unless the stored `ignoredNames` permits the bounded component comparison above. The target's role and normalized name must still identify exactly one element, including when its name is empty.
+
+For a mismatch with stored components, differing `structure` gives difference kind `structure`. Equal structure with changed, non-ignored name hashes gives `neighbor-names` and the changed slots in fixed order: `parent`, `siblingBefore`, `siblingAfter`.
+
+Without components, ambercast omits the difference kind. If a strict entry's complete fingerprint differs but its components agree, ambercast also omits the difference kind and changed slots. This inconsistent record remains a miss; ambercast neither repairs its components nor relaxes matching.
+
+When resolution is allowed, ambercast can add ignored slots after a fingerprint mismatch for an entry whose intent still matches. The resolved locator must retain the same role and normalized name, and its observed structure must equal the stored structure. ambercast uses the name hashes observed during resolution, adding changed slots to the stored list without duplicates.
+
+If no name hash changed, ambercast keeps the existing list. If these conditions fail, resolution produces a strict entry without ignored slots. A replay that cannot resolve may use saved ignored slots but MUST NOT add any.
+
+ambercast saves the new entry only after confirmation or successful case completion, subject to the write-back gate. A stored hit leaves the entry unchanged. Rebuilding a strict entry is the only way to remove ignored slots.
 
 `hit`, `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, and `snapshot-invalid` are distinct resolution outcomes. An absent or malformed tree is `element-not-found`; more than one normalized role/name match is `ambiguous-match`; an old or differing hash is `fingerprint-mismatch`. [repo:src/core/ir/fingerprint.ts:348] [repo:src/core/ir/fingerprint.ts:436] An unpaired surrogate produces no fingerprint at generation and `element-not-found` at resolution. [repo:src/core/ir/fingerprint.ts:57-59] [repo:src/core/ir/fingerprint.ts:251-253]
 

@@ -30,7 +30,7 @@ When another entry requires write-back, unchanged v4 entries can remain without 
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | repo:src/core/ir/schema.ts:1446 |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | repo:src/core/ir/schema.ts:1447 |
 |  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | Structure and slot-name hashes. | repo:src/core/ir/schema.ts:1519 |
-|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | Slot list; complete fingerprint matching remains in effect. | repo:src/core/ir/schema.ts:1519 |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | Slots excluded from cross-run name matching. | repo:src/core/ir/schema.ts:1519 |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | repo:src/core/ir/schema.ts:1464 |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | repo:src/core/ir/schema.ts:1465 |
 
@@ -46,7 +46,7 @@ Each hash MUST be lowercase SHA-256 hexadecimal. An absent sibling MUST have a `
 
 Producers MUST omit an empty list. Unknown component fields or one invalid entry invalidate the whole document. Schema validation checks shapes and combinations, not whether the full fingerprint and components describe the same observation.
 
-The current implementation never writes `ignoredNames`. Matching still compares the complete fingerprint, including when a stored entry contains `ignoredNames`.
+An entry with `ignoredNames` matches by structure and the non-ignored name hashes, as defined in [[spec/fingerprint#matching]]. Resolution can add slots only under that chapter's bounded conditions. The check immediately before acting still compares the complete fingerprint from the current run.
 
 ## Trace record {#trace-record}
 

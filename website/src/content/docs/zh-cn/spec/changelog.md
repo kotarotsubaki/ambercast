@@ -7,7 +7,8 @@ description: "产物版本的接受必须 (MUST) 遵循 Ambercast 执行计划�
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
-| 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。匹配仍比较完整指纹；ambercast 不写入 `ignoredNames`。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
+| report 3.12 → 3.13 新增步骤 `binding.ignoredNames`、`neighbor-name-ignored` 警告，以及 recoverable-miss 的 `verification`、`difference` 和 `changedNames`。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。 |
+| 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。跨次回放可使用已保存的邻近名称忽略槽位；同次回放的操作仍由完整指纹保护。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
 | report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
 | 用例的所有步骤都通过后，click、press、fill、fill-secret 和 capture 的定位缓存条目也会在允许回写时保存。定位缓存格式不变。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 无需迁移。 |
 | provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |

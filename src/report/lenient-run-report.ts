@@ -3,6 +3,8 @@
  * 3.5, and 3.6 artifacts. The emission contract remains ReportEnvelope at
  * REPORT_SCHEMA_VERSION; relaxing it would change newly written reports.
  * This reader schema must not enter generate-json-schema.ts or the public JSON Schema.
+ * Persisted older run reports use this reader without requiring or synthesizing ignoredNames, neighbor
+ * notices, or difference details. Missing historical evidence must stay absent.
  */
 import { z } from 'zod';
 import { OBSERVED_NOTE, Summary, SessionResult, NonWhitespaceString, NonNegativeInteger } from './schema.js';

@@ -11,7 +11,7 @@ description: ambercast の構造化 JSON レポートのエンベロープ、コ
 
 | フィールド | 型と規則 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.12` |
+| `schemaVersion` | リテラル `3.13` |
 | `command` | `generate`、`run`、`check`、`heal`、`review` のいずれか |
 | `startedAt` | `YYYY-MM-DDTHH:mm:ssZ` 形式の UTC 文字列 |
 | `durationMs` | 非負の整数 |
@@ -166,7 +166,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
-ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
+ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer, ignoredNames?: FingerprintNameSlot[] }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
 
 ケースの全ステップが合格すると、残りの操作とキャプチャーのバインディングも `confirmed` が `true` になる。書き戻しが許可されない場合や失敗した場合も、この値は `true` のままである。グラウンディングファイルの更新を保証する値ではない。
 
@@ -204,7 +204,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` ケースの範囲のみ。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。追加の任意項目は下表を参照する。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", difference?: "neighbor-names" \| "structure", changedNames?: FingerprintNameSlot[], verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。追加の任意項目は下表を参照する。 |
 
 `GROUNDING_UNRESOLVED` の追加診断は、初回の対象特定で失敗した場合だけに付く。この段階では、AI が要素を提案する場合と、AI を呼ばずに引用から候補が一意に決まる場合がある。
 
@@ -230,7 +230,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 
 この診断は失敗の原因を見分けるためのものである。初回の対象特定が実行ごとに揺れる問題そのものは解消しない。
 
-`reason` の語彙、`message`、`hint`、終了コード、再実行の手順は変わらない。`missing` など、ほかの `GROUNDING_UNRESOLVED` の `details` も変わらない。
+`reason` の語彙と終了コードは変わらない。回復可能な指紋の違いの案内は後述する。`missing` など、ほかの `GROUNDING_UNRESOLVED` の `details` も変わらない。
 
 `AI_RESPONSE_INVALID` の問題の `code` は、次のいずれかである。
 
@@ -290,16 +290,16 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 現在のスキーマのバージョンに固定されるのは、書き込み側だけである。ビューアーは、3.x のレポートであれば寛容に読む。次の例は、コマンドごとのエンベロープを 1 つずつ示す。
 
 ```json
-{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.13","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.13","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換アンカー {#report-persistence}
@@ -312,3 +312,60 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 - [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
 - [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)
 - [ambercast run](/ambercast/ja/reference/cli/run/#report-and-exits)
+
+## 隣の名前を除外した警告 {#neighbor-name-warnings}
+
+runとhealのstepの `binding.ignoredNames` は、実行をまたぐ照合から除外する全スロットを列挙する。保存済みエントリに一致した場合も、そのbindingに除外があれば毎回出る。除外がなければ項目を省く。
+
+runの `{ kind: 'neighbor-name-ignored', stepId, names, saved }` は、この実行で新たな除外を持つエントリが確定したことを示す。未確定のbindingや、除外を追加しなかった実行には出ない。警告は合否と終了コードを変えない。
+
+| 項目 | 意味 |
+| --- | --- |
+| `stepId` | 確定したエントリの除外が増えたステップ。 |
+| `names` | 取り直し時点の保存済み一覧になかった新しいスロットだけを示す。空と重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。 |
+| `saved` | 実行終了時の書き戻しでグラウンディングを書いたかを示す。許可、秘匿値の検査、直列化の検査、書き込みの失敗で保存できなければfalseになる。 |
+
+書き込みの失敗でケースがerrorになっても警告は残る。既存の警告の後に、新しい警告を計画のステップ順で並べる。人向けの出力も同じ順である。
+
+```text
+  warning: <stepId>: the text next to this element differed from the stored grounding (<slots>); it is no longer compared for this step
+```
+
+`saved` がfalseなら、同じ行の末尾に `; this was not saved, so the next replay stops here again` を加える。
+
+`<slots>` は次の表示を固定順で `, ` でつなぐ。
+
+| スロット | 表示 |
+| --- | --- |
+| `parent` | `its container` |
+| `siblingBefore` | `the element before it` |
+| `siblingAfter` | `the element after it` |
+
+人向けの出力は `binding.ignoredNames` を別途表示しない。保存済みの3.12以前のレポートは、新項目を補わずに読める。新しい出力と公開スキーマは3.13だけを受け入れる。
+
+## 回復可能な指紋の違い {#recoverable-differences}
+
+`reason: 'recoverable-miss'` の `GROUNDING_UNRESOLVED` は、保存済みエントリの照合が失敗したとき `verification` を含む。指紋の不一致で違いの種類が分かる場合は、次の項目を加える。
+
+| 項目 | 値と条件 |
+| --- | --- |
+| `difference` | `neighbor-names` または `structure`。種類が不明なら省く。 |
+| `changedNames` | `neighbor-names` のときだけ、除外していない変化したスロットを示す。空と重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。 |
+
+該当しない項目はnullにせず省く。`candidate-changed` には追加しない。項目には分類とスロットの識別子だけを入れ、画面の文字列は含めない。
+
+`neighbor-names` のmessageとhint、および `structure` のmessageは、順に次のとおりである。
+
+```text
+The element was found, but the text next to it differs from the stored grounding.
+```
+
+```text
+If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.
+```
+
+```text
+The element was found, but the elements around it differ from the stored grounding.
+```
+
+`structure` のhintは変わらない。種類が不明な場合と、ほかの照合結果のmessageとhintも変わらない。

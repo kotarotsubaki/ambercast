@@ -2,6 +2,7 @@
 
 import { AmbercastError } from './types.js';
 import type { GroundingMissReason } from './grounding-miss-reason.js';
+import type { FingerprintNameSlot } from '../ir/schema.js';
 
 /** Distinguishes an absent grounding entry from a trace that cannot be replayed safely. */
 export type GroundingUnresolvedReason = 'missing' | 'recoverable-miss' | 'no-candidate' | 'ambiguous' | 'proposal-rejected' | 'candidate-changed';
@@ -21,7 +22,12 @@ export type GroundingUnresolvedReason = 'missing' | 'recoverable-miss' | 'no-can
  * during re-observation carries the verification miss reason. Those latter
  * failures include the found outcome, role, and name only for AI proposals,
  * never for candidates selected by quoted text. Other grounding misses retain
- * only the step identifier and reason.
+ * only the step identifier and reason. Recoverable stored misses retain
+ * verification and, for known fingerprint differences, the difference kind;
+ * only neighbor-name differences carry changedNames. Inapplicable keys are
+ * omitted, and candidate-changed retains its existing evidence. Run
+ * owns these combinations; report validation stays outside the core error.
+ * The added evidence contains slot identifiers rather than screen text or secrets.
  *
  * Proposal role and name retain the AI response values, including an empty
  * name, until report redaction masks resolved secrets and run-variable values.
@@ -41,6 +47,8 @@ export class GroundingUnresolvedError extends AmbercastError {
       readonly proposalMatchCount?: number;
       readonly rejection?: 'not-unique' | 'snapshot-invalid' | 'fingerprint-unavailable' | 'role-mismatch';
       readonly verification?: GroundingMissReason;
+      readonly difference?: 'neighbor-names' | 'structure';
+      readonly changedNames?: readonly [FingerprintNameSlot, ...FingerprintNameSlot[]];
     },
     options?: { cause?: unknown },
   ) {

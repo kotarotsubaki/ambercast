@@ -11,7 +11,7 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 要素のエントリは、ロケーター、フィンガープリント、意図のダイジェスト、来歴を持つ。解決では保存済みのロケーターを使い、フィンガープリントを照合する。エントリの形は、グラウンディングドキュメントで確かめられる。
 
-リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
+リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。保存済みの除外スロットがあれば、以下の限定した規則で照合できる。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
 
 再生中の判断は、次の4つに分かれる。
 
@@ -26,7 +26,7 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 
 記録済みで有効なAIトレースは、AIエグゼキューターを解決せずに再生する。エージェント的なフォールバックを選ぶより前に、この経路を使う。
 
-要素の解決が命中したときは、保存済みのフィンガープリントを再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
+要素の解決が命中したときは、同じ実行で観測した完全な指紋を再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#replay)、[CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
@@ -53,6 +53,16 @@ description: 再生が記録済みのグラウンディングを使ってAIを�
 要素のミスも同じで、その場で解決せず、終了コード4でフェイルクローズする。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#resolve)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+
+## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
+
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後はその要素をAIなしで再生できる。対象のアクセシブルな名前の有無は問わない。
+
+v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
+
+隣接する要素の出現や消失など、構造の変化は不一致のままとし、照合を緩めない。resolveの許可がない再生では、除外するスロットを追加しない。操作直前は、除外した名前も含め、同じ実行で取得した完全な指紋を比べる。
+
+表示の変化をresolveする前に、ページが意図したレコードを表示しているか確認する。[レポート](/ambercast/ja/reference/reports/#neighbor-name-warnings)で、新たに除外したスロットと保存の成否を確認できる。
 
 ## ドリフトの引き継ぎ {#drift-handoff}
 

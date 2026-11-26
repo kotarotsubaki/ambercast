@@ -66,7 +66,7 @@ Only the codes below carry `details`. See [Reports](/ambercast/reference/reports
 | `UNEXPECTED_CRASH` | An allowlisted cause name. |
 | `EXECUTOR_UNSUPPORTED` | The target, the executor, the reason (`surface-mismatch` or `capability-missing`), the missing capabilities, and optionally the surface. |
 | `PROMPT_PATH_INVALID` | The path and the reason (`outside-test-dir`, `not-test-md`, or `no-name`). |
-| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). Initial target-selection failures also include applicable optional fields: `proposalOutcome`, `proposalRole`, `proposalName`, `proposalMatchCount`, `rejection`, and `verification`. See [Reports](/ambercast/reference/reports/#errors) for each field's conditions. |
+| `GROUNDING_UNRESOLVED` | The step ID and the reason (`missing`, `recoverable-miss`, `no-candidate`, `ambiguous`, `proposal-rejected`, or `candidate-changed`). Initial target-selection failures also include applicable optional fields: `proposalOutcome`, `proposalRole`, `proposalName`, `proposalMatchCount`, `rejection`, and `verification`. See [Reports](/ambercast/reference/reports/#errors) for each field's conditions. Recoverable fingerprint misses can also include `difference` and `changedNames`. |
 
 ## See also {#see-also}
 

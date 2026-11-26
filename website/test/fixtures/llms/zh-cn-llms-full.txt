@@ -1638,7 +1638,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/reports/
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.12` |
+| `schemaVersion` | 字面量 `3.13` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | 格式为 `YYYY-MM-DDTHH:mm:ssZ` 的 UTC 字符串 |
 | `durationMs` | 非负整数 |
@@ -1801,7 +1801,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
-经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
+经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer, ignoredNames?: FingerprintNameSlot[] }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
 
 用例的所有步骤都通过后，剩余操作和捕获步骤的绑定也会将 `confirmed` 设为 `true`。即使回写未获允许或写入失败，该值仍为 `true`，因此它不保证定位缓存文件已更新。
 
@@ -1839,7 +1839,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` 仅用例作用域。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。新增可选字段见下表。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", difference?: "neighbor-names" \| "structure", changedNames?: FingerprintNameSlot[], verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。新增可选字段见下表。 |
 
 `GROUNDING_UNRESOLVED` 的新增诊断仅在首次确定目标失败时出现。在这一阶段，AI 可以提出元素候选，也可能由引文唯一确定候选而无需调用 AI。
 
@@ -1865,7 +1865,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 
 这些诊断用于区分失败原因。它们不会解决首次确定目标在不同运行之间波动的问题。
 
-`reason` 的取值、`message`、`hint`、退出码和重新运行的步骤保持不变。`missing` 等其他 `GROUNDING_UNRESOLVED` 的 `details` 也保持不变。
+`reason` 的取值和退出码保持不变。可恢复的指纹差异使用下述提示。`missing` 等其他 `GROUNDING_UNRESOLVED` 的 `details` 也保持不变。
 
 `AI_RESPONSE_INVALID` 的问题 `code` 可以是下列任一值：
 
@@ -1925,16 +1925,16 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 只有写入方固定在当前的 schema 版本，查看器会宽松地读取任何 3.x 报告。下面的示例各展示一个命令的信封。
 
 ```json
-{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.13","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.13","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容锚点 {#report-persistence}
@@ -1947,6 +1947,63 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 - [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
 - [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)
 - [ambercast run](/ambercast/zh-cn/reference/cli/run/#report-and-exits)
+
+## 忽略邻近名称的警告 {#neighbor-name-warnings}
+
+run 和 heal 步骤的 `binding.ignoredNames` 列出跨次回放时不比较名称的所有槽位。只要目标绑定包含忽略槽位，每次都会显示，包括已保存记录命中的情况。没有忽略槽位时省略此字段。
+
+run 的 `{ kind: 'neighbor-name-ignored', stepId, names, saved }` 表示本次确认的记录项新增了忽略槽位。未确认的绑定或未新增槽位的回放不会产生此警告。警告不会改变结果或退出码。
+
+| 字段 | 含义 |
+| --- | --- |
+| `stepId` | 已确认记录项新增忽略槽位的步骤。 |
+| `names` | 仅列出重新确定目标时原列表没有的新增槽位。非空且不重复，按 `parent`、`siblingBefore`、`siblingAfter` 固定排序。 |
+| `saved` | 本次结束时是否写回定位缓存文件。权限、机密检查、序列化检查或写入失败阻止保存时为 false。 |
+
+即使用例因写入失败变为 error，警告仍保留。现有警告在前，新警告按执行计划的步骤顺序排列。面向人的输出遵循同样顺序：
+
+```text
+  warning: <stepId>: the text next to this element differed from the stored grounding (<slots>); it is no longer compared for this step
+```
+
+`saved` 为 false 时，同一行末尾追加 `; this was not saved, so the next replay stops here again`。
+
+`<slots>` 按固定槽位顺序用 `, ` 连接下列名称：
+
+| 槽位 | 显示名称 |
+| --- | --- |
+| `parent` | `its container` |
+| `siblingBefore` | `the element before it` |
+| `siblingAfter` | `the element after it` |
+
+面向人的输出不单独显示 `binding.ignoredNames`。已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。
+
+## 可恢复的指纹差异 {#recoverable-differences}
+
+`reason: 'recoverable-miss'` 的 `GROUNDING_UNRESOLVED` 在已保存记录项验证失败时包含 `verification`。指纹不匹配且差异已知时，还会添加下列字段：
+
+| 字段 | 值和条件 |
+| --- | --- |
+| `difference` | `neighbor-names` 或 `structure`；差异类型未知时省略。 |
+| `changedNames` | 仅在 `neighbor-names` 时列出变化且未忽略的槽位。非空且不重复，按 `parent`、`siblingBefore`、`siblingAfter` 固定排序。 |
+
+不适用的字段直接省略，不输出 null。`candidate-changed` 不添加这些字段。字段只包含分类和槽位标识符，不包含页面文字。
+
+`neighbor-names` 的 message 和 hint，以及 `structure` 的 message 依次如下：
+
+```text
+The element was found, but the text next to it differs from the stored grounding.
+```
+
+```text
+If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.
+```
+
+```text
+The element was found, but the elements around it differ from the stored grounding.
+```
+
+`structure` 的 hint 保持不变。未知差异和其他验证结果的 message 和 hint 也保持不变。
 
 ---
 
@@ -2016,7 +2073,7 @@ ambercast 用一组固定的错误代码报告运行级和用例级的失败。�
 | `UNEXPECTED_CRASH` | 白名单内的原因名称。 |
 | `EXECUTOR_UNSUPPORTED` | 目标、执行器、原因（`surface-mismatch` 或 `capability-missing`）、缺少的能力，以及可选的界面。 |
 | `PROMPT_PATH_INVALID` | 路径和原因（`outside-test-dir`、`not-test-md` 或 `no-name`）。 |
-| `GROUNDING_UNRESOLVED` | 步骤 ID 和原因（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected` 或 `candidate-changed`）。首次确定目标失败时，还会包含适用的可选字段：`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection` 和 `verification`。各字段的出现条件见[报告](/ambercast/zh-cn/reference/reports/#errors)。 |
+| `GROUNDING_UNRESOLVED` | 步骤 ID 和原因（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected` 或 `candidate-changed`）。首次确定目标失败时，还会包含适用的可选字段：`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection` 和 `verification`。各字段的出现条件见[报告](/ambercast/zh-cn/reference/reports/#errors)。 可恢复的指纹不匹配还可包含 `difference` 和 `changedNames`。 |
 
 ## 另请参阅 {#see-also}
 
@@ -2179,7 +2236,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json` | 5 | `ambercast grounding schema v5` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.13"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
 
 另有 6 个冻结快照，保留旧契约；定位缓存 v4 仍可读取。站点从已提交的文件发布这些快照，npm 软件包不导出它们。
 
@@ -2203,7 +2260,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | `plan.schema.json` | 执行计划 `schemaVersion` 为 5，并包含来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 定位缓存 `schemaVersion` 为 5，并包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` 为必填项，其余声明的设置项均为可选项的当前配置文档。 | 转换为 JSON Schema 2020-12 的 Zod `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report `schemaVersion` 为 3.12 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report `schemaVersion` 为 3.13 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` 先编译软件包，再运行 `node dist/schema-gen.js`。该脚本递归创建 Schema 目录，并写入上述 4 个 Schema 文件。它还会在 `dist/manifest/` 下写入清单文件。
 
@@ -2219,7 +2276,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.12、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
+`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.13、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
 
 ## 另请参阅 {#see-also}
 
@@ -2658,6 +2715,18 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/glossary/
 - [环境变量](/ambercast/zh-cn/reference/environment-variables/)
 - [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/)
 
+## 成分 {#components}
+
+`components` 将指纹分为结构哈希，以及父元素和紧邻兄弟元素的名称哈希。结构包括目标角色和名称、邻近角色及兄弟元素是否存在。
+
+## 忽略名称和槽位 {#ignored-names}
+
+`ignoredNames` 列出跨次回放时不比较名称的槽位：`parent`、`siblingBefore` 和 `siblingAfter`。它不会排除目标名称，也不会跳过操作前的完整指纹比较。
+
+## 差异类型 {#difference-kind}
+
+`difference` 对含成分的指纹不匹配分类。`neighbor-names` 表示只有未忽略的邻近名称哈希不同；`structure` 表示结构哈希不同。没有成分时，ambercast 省略此分类。
+
 ---
 
 # MCP 工具
@@ -2963,6 +3032,16 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 在 JSON 中，取得执行计划后失败的用例也带可选的 `replayReadiness`。准备状态不会改变退出码。[报告](/ambercast/zh-cn/reference/reports/#run-results)定义了字段值及判定范围。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#run-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+
+## 每次回放都变化的邻近文字 {#changing-neighbor-text}
+
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，后续回放该元素无需 AI。目标是否有无障碍名称都适用。
+
+v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
+
+邻近元素出现或消失等结构变化仍为不匹配，不会放宽匹配。不允许 resolve 的回放不会添加忽略槽位。操作前，ambercast 仍比较本次回放的完整指纹，包括忽略的名称。
+
+resolve 文字变化前，先确认页面显示的是预期记录。[报告](/ambercast/zh-cn/reference/reports/#neighbor-name-warnings)说明本次新增的忽略槽位及保存结果。
 
 ---
 
@@ -3318,7 +3397,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/overview/
 | 执行计划的 `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | 定位缓存的 `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | 指纹算法 | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.13` | `src/report/schema.ts:58` |
 
 ## 阅读顺序 {#reading-order}
 
@@ -3764,7 +3843,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 |  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。| `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。| `src/core/ir/schema.ts:1447` |
 |  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 结构与槽位名称哈希。| `src/core/ir/schema.ts:1519` |
-|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 槽位列表；仍按完整指纹匹配。| `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 跨次回放时不比较名称的槽位列表。| `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。| `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。| `src/core/ir/schema.ts:1465` |
 
@@ -3782,7 +3861,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/grounding-document/
 
 未知的组成部分字段或任何无效记录项都会使整个文档不符合 Schema。Schema 验证只检查结构和组合，不验证完整指纹与组成部分是否来自同一次观察。
 
-当前实现不会写入 `ignoredNames`。即使已保存的记录项包含 `ignoredNames`，匹配仍比较完整指纹。
+包含 `ignoredNames` 的记录项按结构和未忽略的名称哈希匹配。[元素指纹](/ambercast/zh-cn/spec/fingerprint/#matching)定义添加槽位的条件。操作前仍比较本次回放取得的完整指纹。
 
 ## 轨迹记录 {#trace-record}
 
@@ -3900,7 +3979,9 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/
 
 匹配验证和操作前复核沿用现有检查，不增加密钥污染拒绝条件 (`src/core/ir/fingerprint.ts:343-448`)。
 
-即使记录项包含 `components` 或 `ignoredNames`，匹配也必须比较完整指纹 (MUST)。当前实现不会写入 `ignoredNames`。
+没有 `ignoredNames` 时，匹配必须比较完整指纹 (MUST)。有此字段时，必须比较 `structure` 和未忽略槽位的名称哈希 (MUST)。三个槽位全部忽略时，只比较 `structure`。
+
+操作前，ambercast 仍比较本次回放确定目标时的完整指纹。即使是忽略的文字，在确定目标后发生变化也会阻止操作。
 
 ## 摘要 {#digest}
 
@@ -3914,7 +3995,17 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/fingerprint/
 
 ## 匹配 {#matching}
 
-指纹不匹配必须 (MUST) 按未命中处理，不得把它当作旧元素可以安全回放的证据。这遵循已实现的版本门禁和不匹配失效机制 (`src/core/ir/schema.ts:320`) (`src/core/ir/fingerprint.ts:436`)。
+指纹不匹配必须视为未命中 (MUST)，但已保存的 `ignoredNames` 允许按上述成分规则匹配时除外。目标仍须由角色和规范化名称唯一确定，空名称也遵循此规则。
+
+有已保存的成分时，`structure` 不同表示差异类型为 `structure`。结构相同而未忽略的名称哈希不同，表示 `neighbor-names`。变化的槽位按 `parent`、`siblingBefore`、`siblingAfter` 的固定顺序列出。
+
+没有成分时，省略差异类型。严格记录项的完整指纹不同但成分全部相同时，也省略差异类型和槽位。这种不一致的记录仍为未命中；ambercast 不会修复成分或放宽匹配。
+
+只有允许 resolve 且意图一致的已保存记录项发生指纹不匹配时，才可能添加忽略槽位。重新确定的角色、规范化名称和结构必须与已保存的记录一致。ambercast 按重新确定目标时的名称哈希计算变化，并将槽位加入原列表，消除重复。
+
+没有名称变化时，保留原列表。不满足条件时，重新生成不含忽略槽位的严格记录项。不允许 resolve 的回放可以使用已保存的忽略槽位，但不会添加槽位。
+
+确认目标或用例全部通过后，ambercast 按写回权限保存新记录项。已命中的记录项保持不变。只有重建严格记录项才能减少忽略槽位。
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是互不相同的解析结果。树缺失或格式错误时为 `element-not-found`；归一化后的 role 和 name 匹配多个节点时为 `ambiguous-match`；哈希过旧或不同时为 `fingerprint-mismatch` (`src/core/ir/fingerprint.ts:348`) (`src/core/ir/fingerprint.ts:436`)。未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found` (`src/core/ir/fingerprint.ts:57-59`) (`src/core/ir/fingerprint.ts:251-253`)。
 
@@ -4200,7 +4291,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
-| 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。匹配仍比较完整指纹；ambercast 不写入 `ignoredNames`。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
+| report 3.12 → 3.13 新增步骤 `binding.ignoredNames`、`neighbor-name-ignored` 警告，以及 recoverable-miss 的 `verification`、`difference` 和 `changedNames`。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。 |
+| 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。跨次回放可使用已保存的邻近名称忽略槽位；同次回放的操作仍由完整指纹保护。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
 | report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
 | 用例的所有步骤都通过后，click、press、fill、fill-secret 和 capture 的定位缓存条目也会在允许回写时保存。定位缓存格式不变。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 无需迁移。 |
 | provider 响应新增可选 `assumptions`；`ambiguities` 仅表示目标分配未确定。producer 指纹改变，已有执行计划过期。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | 按[生成器变更后重新定位](/ambercast/zh-cn/how-to/upgrade/#reground-after-producer-change) 重新生成执行计划并重建定位缓存。 |
@@ -4315,7 +4407,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。指纹不匹配不会被当作命中。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
 
 回放随后走以下四条路径之一：
 
@@ -4330,7 +4422,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 已覆盖且有效的 AI 轨迹无需解析 AI 执行器即可回放。回放会先走这条路径，再考虑任何代理式回退。
 
-元素解析命中时，回放直接使用保存的指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
+元素解析命中时，回放使用本次观测到的完整指纹，不再请求新的解析。缓存完整时，运行无需探测提供方，命中也不会产生 AI 调用事件。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#replay)、[CI 中的确定性](/ambercast/zh-cn/explanation/determinism-in-ci/#bounded-side-effects)
 
@@ -4357,6 +4449,16 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 元素未命中同样失败关闭，退出码为 4，不会实时解析元素。
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
+
+## 每次回放都变化的邻近文字 {#changing-neighbor-text}
+
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，后续回放该元素无需 AI。目标是否有无障碍名称都适用。
+
+v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
+
+邻近元素出现或消失等结构变化仍为不匹配，不会放宽匹配。不允许 resolve 的回放不会添加忽略槽位。操作前，ambercast 仍比较本次回放的完整指纹，包括忽略的名称。
+
+resolve 文字变化前，先确认页面显示的是预期记录。[报告](/ambercast/zh-cn/reference/reports/#neighbor-name-warnings)说明本次新增的忽略槽位及保存结果。
 
 ## 漂移的移交 {#drift-handoff}
 

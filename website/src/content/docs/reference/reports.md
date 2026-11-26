@@ -11,7 +11,7 @@ All objects in the public report schemas are strict and reject unknown fields. T
 
 | field | type and contract |
 | --- | --- |
-| `schemaVersion` | literal `3.12` |
+| `schemaVersion` | literal `3.13` |
 | `command` | `generate`, `run`, `check`, `heal`, or `review` |
 | `startedAt` | UTC string shaped `YYYY-MM-DDTHH:mm:ssZ` |
 | `durationMs` | non-negative integer |
@@ -162,7 +162,7 @@ Step and review results share these branches.
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
-After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
+After local verification, an action or capture step can carry `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer, ignoredNames?: FingerprintNameSlot[] }`. For `grounding`, `confirmed` is always `true`, because the binding came from an entry confirmed in an earlier run. It does not mean the entry was written in this run. For `quoted-match` and `ai-proposed`, it holds the value at case end. The timing fields appear only when those stages ran. Earlier binding failures report a case error instead.
 
 When every case step passes, `confirmed` is also `true` for the remaining action and capture bindings. This value remains `true` even if write-back is disallowed or fails. It does not guarantee that the grounding file was updated.
 
@@ -200,7 +200,7 @@ Where `attempts` appears, it is `Array<{ attempt: integer 1–5, code: ReportErr
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` Case scope only. |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. See the tables below for the additional optional fields. |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", difference?: "neighbor-names" \| "structure", changedNames?: FingerprintNameSlot[], verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` For an element step, `missing` means no grounding entry exists, and `recoverable-miss` means an existing entry does not match the current page. See the tables below for the additional optional fields. |
 
 The additional `GROUNDING_UNRESOLVED` diagnostics appear only when initial target selection fails. At this stage, AI can propose an element, or a quotation can uniquely identify a candidate without an AI call.
 
@@ -226,7 +226,7 @@ Candidates selected uniquely from a quotation have no proposal fields. Human-rea
 
 These diagnostics distinguish failure causes. They do not fix variation in initial target selection between runs.
 
-The `reason` vocabulary, `message`, `hint`, exit code, and rerun procedure stay the same. Other `GROUNDING_UNRESOLVED` details, such as those for `missing`, also stay the same.
+The `reason` vocabulary and exit codes stay the same; recoverable fingerprint differences have the messages and hints below. Other `GROUNDING_UNRESOLVED` details, such as those for `missing`, also stay the same.
 
 For `AI_RESPONSE_INVALID`, the issue `code` is any of these values:
 
@@ -286,16 +286,16 @@ The `reportPersistence` property records the write outcome:
 Only the writer is pinned to the current schema version. The viewer reads any 3.x report leniently. The examples below show one envelope per command.
 
 ```json
-{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.13","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.13","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## Persistence compatibility anchor {#report-persistence}
@@ -308,3 +308,62 @@ This section keeps an older anchor alive. See [Report persistence](/ambercast/re
 - [Exit codes](/ambercast/reference/exit-codes/#exit-code-table)
 - [File layout](/ambercast/reference/file-layout/#run-artifacts)
 - [ambercast run](/ambercast/reference/cli/run/#report-and-exits)
+
+## Ignored neighboring names {#neighbor-name-warnings}
+
+A run or heal step's `binding.ignoredNames` lists all slots excluded from cross-run name comparison. It appears whenever that binding has ignored slots, including a stored hit; otherwise ambercast omits it.
+
+On run results, `{ kind: 'neighbor-name-ignored', stepId, names, saved }` warns that this run confirmed an entry with newly ignored slots. No warning appears for an unconfirmed binding or a run that added none. The warning changes neither the verdict nor the exit code.
+
+| Field | Meaning |
+| --- | --- |
+| `stepId` | The step whose confirmed entry gained ignored slots. |
+| `names` | Only newly added slots, absent from the stored list at resolution; nonempty, unique, in `parent`, `siblingBefore`, `siblingAfter` order. |
+| `saved` | Whether end-of-run write-back wrote the grounding file. False if permission, secret validation, serialization validation, or a write failure prevented saving. |
+
+The warning survives a write failure that makes the case an error. Existing warnings come first; these new warnings follow in plan step order. Human output uses the same order:
+
+```text
+  warning: <stepId>: the text next to this element differed from the stored grounding (<slots>); it is no longer compared for this step
+```
+
+If `saved` is false, the same line ends with `; this was not saved, so the next replay stops here again`.
+
+`<slots>` joins the following labels with `, ` in fixed slot order:
+
+| Slot | Human label |
+| --- | --- |
+| `parent` | `its container` |
+| `siblingBefore` | `the element before it` |
+| `siblingAfter` | `the element after it` |
+
+The human output does not print `binding.ignoredNames` separately. Stored reports from 3.12 and earlier remain readable without synthesizing new fields. Newly emitted reports and the published report schema accept only 3.13.
+
+## Recoverable fingerprint differences {#recoverable-differences}
+
+A `GROUNDING_UNRESOLVED` error with `reason: 'recoverable-miss'` includes `verification` when a stored entry's verification fails. A fingerprint mismatch with a known difference adds these fields:
+
+| Field | Values and presence |
+| --- | --- |
+| `difference` | `neighbor-names` or `structure`; omitted when the difference is unknown. |
+| `changedNames` | Only for `neighbor-names`: nonempty, unique changed non-ignored slots in `parent`, `siblingBefore`, `siblingAfter` order. |
+
+ambercast omits inapplicable fields rather than emitting null. It adds neither field to `candidate-changed`. These fields contain classifications and slot identifiers, never page text.
+
+For `neighbor-names`, the message and hint are:
+
+```text
+The element was found, but the text next to it differs from the stored grounding.
+```
+
+```text
+If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.
+```
+
+For `structure`, the message is:
+
+```text
+The element was found, but the elements around it differ from the stored grounding.
+```
+
+The structure hint remains unchanged. Unknown differences and other verification outcomes keep their existing message and hint.

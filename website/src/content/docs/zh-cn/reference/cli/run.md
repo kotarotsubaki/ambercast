@@ -74,3 +74,13 @@ description: 规范 ambercast run 的标志、回放路径、显式 AI 解析与
 在 JSON 中，取得执行计划后失败的用例也带可选的 `replayReadiness`。准备状态不会改变退出码。[报告](/ambercast/zh-cn/reference/reports/#run-results)定义了字段值及判定范围。
 
 相关链接：[配置](/ambercast/zh-cn/reference/configuration/#grounding)、[报告](/ambercast/zh-cn/reference/reports/#run-results)、[文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)、[退出码](/ambercast/zh-cn/reference/exit-codes/#aggregation-priority)。
+
+## 每次回放都变化的邻近文字 {#changing-neighbor-text}
+
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，后续回放该元素无需 AI。目标是否有无障碍名称都适用。
+
+v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
+
+邻近元素出现或消失等结构变化仍为不匹配，不会放宽匹配。不允许 resolve 的回放不会添加忽略槽位。操作前，ambercast 仍比较本次回放的完整指纹，包括忽略的名称。
+
+resolve 文字变化前，先确认页面显示的是预期记录。[报告](/ambercast/zh-cn/reference/reports/#neighbor-name-warnings)说明本次新增的忽略槽位及保存结果。

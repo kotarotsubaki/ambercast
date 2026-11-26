@@ -1,0 +1,19 @@
+{"value":{"names":["parent"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 0","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingBefore"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 1","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingAfter"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 2","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","siblingBefore"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 3","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","siblingAfter"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 4","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingBefore","siblingAfter"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 5","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","siblingBefore","siblingAfter"],"saved":true},"expected":true,"note":"accepts canonical tuple and Boolean persistence 6","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent"],"saved":false},"expected":true,"note":"accepts canonical tuple and Boolean persistence 7","source":"#720","date":"2026-11-26"}
+{"value":{"names":[],"saved":true},"expected":false,"note":"rejects malformed notice 8","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","parent"],"saved":true},"expected":false,"note":"rejects malformed notice 9","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingAfter","parent"],"saved":true},"expected":false,"note":"rejects malformed notice 10","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingBefore","parent"],"saved":true},"expected":false,"note":"rejects malformed notice 11","source":"#720","date":"2026-11-26"}
+{"value":{"names":["siblingAfter","siblingBefore"],"saved":true},"expected":false,"note":"rejects malformed notice 12","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","siblingAfter","siblingBefore"],"saved":true},"expected":false,"note":"rejects malformed notice 13","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent","siblingBefore","siblingAfter","parent"],"saved":true},"expected":false,"note":"rejects malformed notice 14","source":"#720","date":"2026-11-26"}
+{"value":{"names":["unknown"],"saved":true},"expected":false,"note":"rejects malformed notice 15","source":"#720","date":"2026-11-26"}
+{"value":{"names":null,"saved":true},"expected":false,"note":"rejects malformed notice 16","source":"#720","date":"2026-11-26"}
+{"value":{"names":"parent","saved":true},"expected":false,"note":"rejects malformed notice 17","source":"#720","date":"2026-11-26"}
+{"value":{"names":["parent"],"saved":null},"expected":false,"note":"rejects malformed notice 18","source":"#720","date":"2026-11-26"}

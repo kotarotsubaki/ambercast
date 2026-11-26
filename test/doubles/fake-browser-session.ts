@@ -1,5 +1,5 @@
 import type { ElementRef, Fingerprint } from '../../src/core/ir/schema.js';
-import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
+import { assertLegalGroundingQuery, compareAccessibilityFingerprint, computeAccessibilityFingerprint, normalizeName, type AccessibilityFingerprintOk } from '#core/ir/fingerprint.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { isAllowedSecretSinkOrigin, type SecretSinkPolicy } from '#core/secrets/sink-policy.js';
@@ -165,7 +165,8 @@ const sessionStates = new WeakMap<FakeBrowserSession, FakeBrowserSessionState>()
  * contain punctuation that would make a delimiter-based key ambiguous.
  */
 const elementRefKeyEncoders = {
-  accessibility: (ref: ElementRef): string => JSON.stringify([ref.strategy, ref.role, ref.name]),
+  // Equivalent accessible names must reach the same evidence as in browser matching.
+  accessibility: (ref: ElementRef): string => JSON.stringify([ref.strategy, ref.role, normalizeName(ref.name)]),
 } satisfies Record<ElementRef['strategy'], (ref: ElementRef) => string>;
 
 const fingerprintComparisons = {
@@ -259,10 +260,18 @@ function computeDescriptorContainsResolvedSecret(ref: ElementRef, query: Groundi
   return false;
 }
 
+// Stored verification will use core's pure comparison, shared with Chromium,
+// rather than reproduce relaxed matching here. Illegal ignoredNames without
+// components will throw defensively, never return a miss. Hits will register
+// the current full fingerprint in the private handle record and propagate
+// core's optional mismatch diagnostics unchanged. The fake will never grow
+// exclusions; its pre-action continuity gate will remain strict, including
+// changes to ignored neighbors after bind, with existing refusal semantics.
 function resolveBinding(
   state: FakeBrowserSessionState,
   ref: ElementRef,
   query: GroundingQuery,
+  observed?: AccessibilityFingerprintOk,
 ): GroundedResolution {
   const entry = state.entries.get(elementRefKey(ref));
   if (entry === undefined || !entry.exists) {
@@ -279,6 +288,14 @@ function resolveBinding(
   }
 
   if (query.mode === 'verify') {
+    if (observed !== undefined) {
+      const result = compareAccessibilityFingerprint(query, { fingerprint: entry.currentFingerprint, components: observed.components });
+      if (result.kind !== 'hit') {
+        const { kind, ...diagnostics } = result;
+        return { kind: 'miss', reason: kind, ...diagnostics };
+      }
+      return { kind: 'hit', element: mintBoundElement(state, ref, result.fingerprint), components: result.components };
+    }
     if (!fingerprintsEqual(query.fingerprint, entry.currentFingerprint)) {
       return { kind: 'miss', reason: 'fingerprint-mismatch' };
     }
@@ -610,12 +627,13 @@ export function createFakeBrowserSession(
       return options.captureValues?.get(elementRefKey(record.ref))?.[mode] ?? '';
     },
     async resolveGrounded(ref: ElementRef, query: GroundingQuery): Promise<GroundedResolution> {
+      assertLegalGroundingQuery(query);
       state.bindCalls += 1;
       state.operations.push({ type: 'resolve-grounded', target: ref, query });
-      const result = resolveBinding(state, ref, query);
-      if (result.kind !== 'hit') return result;
       const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, ref, query.mode === 'compute' ? query.resolvedSecrets : []);
-      // Components describe the live neighborhood, so they accompany a hit only when the stored fingerprint equals it, as with the real adapter.
+      const result = resolveBinding(state, ref, query, observed.kind === 'ok' ? observed : undefined);
+      if (result.kind !== 'hit') return result;
+      // Components describe the live neighborhood, so they accompany a hit only when the handle's fingerprint equals it, as with the real adapter.
       if (observed.kind === 'ok' && observed.fingerprint.hash === result.element.fingerprint.hash) {
         Object.assign(result.element, { components: { ...observed.components } });
         return { ...result, components: observed.components };

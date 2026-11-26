@@ -25,7 +25,7 @@ import { projectCauseName } from '#report/error-mapping.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { computePlanDigest } from '#core/ir/digest.js';
-import { computeAccessibilityFingerprint, matchQuotedCandidates } from '#core/ir/fingerprint.js';
+import { computeAccessibilityFingerprint, matchQuotedCandidates, normalizeName } from '#core/ir/fingerprint.js';
 import type { AccessibilityNode } from '#core/ir/aria-snapshot.js';
 import { computeIntentDigest } from '#core/ir/digest.js';
 import { matchRunReferenceTokens } from '#core/ir/run-ref.js';
@@ -267,9 +267,11 @@ function assertionExpectedValue(step: Step): string | undefined {
 // Bindings retain component evidence from the observation that justified them.
 // A cache hit retains the stored fingerprint and component evidence rather
 // than replacing it with live observations. The full live fingerprint belongs
-// only to same-run re-verification. Matching uses the complete fingerprint; a stored
-// ignoredNames list does not change the match result.
-type BindingState = { readonly components?: FingerprintComponents; readonly ignoredNames?: FingerprintNameSlot[]; readonly storedEntry?: Extract<GroundingEntry, { kind: 'element' }> } & (
+// only to same-run re-verification. Stored ignoredNames govern matching
+// across executions without replacing stored evidence after a hit. Slots
+// newly excluded by this run are tracked separately from the retained
+// list, so later reporting can distinguish an addition from an existing rule.
+type BindingState = { readonly components?: FingerprintComponents; readonly ignoredNames?: FingerprintNameSlot[]; readonly addedIgnoredNames?: FingerprintNameSlot[]; readonly storedEntry?: Extract<GroundingEntry, { kind: 'element' }> } & (
   | { readonly stage: 'candidate'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
   | { readonly stage: 'acted'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
   | { readonly stage: 'confirmed'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number });
@@ -2976,14 +2978,23 @@ async function groundedTarget(
   if (operation === 'navigate') throw new IntegrityViolationError('Navigation cannot bind an element intent.');
   const intentDigest = computeIntentDigest({ stepKind: step.kind, operation, intent });
   const stored = entry?.kind === 'element' && entry.intentDigest === intentDigest ? entry : undefined;
+  // Stored components and exclusions reach verify even when resolve is
+  // disabled: that permission controls re-resolution, not existing matching
+  // rules. A hit retains the stored fingerprint, components, and exclusions
+  // in BindingState for persistence, while its live handle uses current full
+  // evidence. No hit refreshes an entry or backfills missing components.
+  // A stored miss reason survives to the re-resolution merge below;
+  // diagnostics from the earlier observation must not choose new exclusions.
+  let storedMissReason: string | undefined;
   if (stored !== undefined) {
     await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
-    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint });
+    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }) });
     if (verified.kind === 'hit') {
       context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, storedEntry: stored, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }), provenance: 'grounding' });
       context.resolvedVias.set(step.id, 'grounding');
       return verified.element;
     }
+    storedMissReason = verified.reason;
     if (!context.resolve) throw new GroundingUnresolvedError(unresolvedMessage(verified.reason), { stepId: step.id, reason: 'recoverable-miss' });
   } else if (!context.resolve) {
     throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
@@ -3046,7 +3057,22 @@ async function groundedTarget(
   // An unavailable fingerprint takes precedence because role agreement alone
   // cannot establish that the candidate is safe to use.
   if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected', rejection: fingerprint.kind !== 'ok' ? 'fingerprint-unavailable' : 'role-mismatch', ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
-  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, components: fingerprint.components, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
+  // Only the replacement observation justifies new exclusions: an earlier
+  // transient mismatch must not weaken evidence that is stable at rebinding.
+  // Changed identity, structure, or absent component evidence starts strict.
+  let ignoredNames: FingerprintNameSlot[] | undefined;
+  let addedIgnoredNames: FingerprintNameSlot[] = [];
+  if (context.resolve && stored !== undefined && storedMissReason === 'fingerprint-mismatch'
+    && stored.locator.role === locator.role && normalizeName(stored.locator.name) === normalizeName(locator.name)
+    && stored.components !== undefined && stored.components.structure === fingerprint.components.structure) {
+    const storedComponents = stored.components;
+    const slots: FingerprintNameSlot[] = ['parent', 'siblingBefore', 'siblingAfter'];
+    const retained: readonly FingerprintNameSlot[] = stored.ignoredNames ?? [];
+    const union = slots.filter(slot => retained.includes(slot) || storedComponents[`${slot}Name`] !== fingerprint.components[`${slot}Name`]);
+    if (union.length > 0) ignoredNames = union;
+    addedIgnoredNames = union.filter(slot => !retained.includes(slot));
+  }
+  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, components: fingerprint.components, ...(ignoredNames === undefined ? {} : { ignoredNames }), addedIgnoredNames, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
   const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
   // The last observation explains why an initially selected candidate is unsafe.
   if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed', verification: verified.reason, ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
@@ -3603,6 +3629,12 @@ function buildElementEntry(
   // reconstruction must serialize identically to the stored entry, without
   // backfilling components into a legacy hit. Confirmation and successful
   // write-back remain prerequisites for fresh evidence to survive a failure.
+  // The merged components and exclusions enter an entry only on confirms
+  // promotion or case completion. Failure or interruption before confirmation
+  // leaves the original entry untouched. A confirms-promoted entry survives
+  // later failure or interruption in memory, and on disk only when
+  // write-back is permitted, secret and serialization guards pass, and the
+  // write succeeds. Refused or failed write-back leaves original file bytes.
   if (state.storedEntry !== undefined) return state.storedEntry;
   const actionStep = context.actionSteps.get(stepId);
   if (actionStep === undefined || (actionStep.kind === 'action' && actionStep.action === 'navigate')) {

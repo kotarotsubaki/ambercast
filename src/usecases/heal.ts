@@ -887,6 +887,14 @@ async function tryGroundingRepair(
   if (mode === 'element-reground' || mode === 'confirms-reground') {
     await writeStorageText(overlay.storage, groundingFile, toCanonicalArtifactText(grounding as JsonValueT), 'The grounding artifact could not be written.');
   }
+  // Ordinary run rules govern exclusions throughout this replay. Deleted
+  // repair targets have no stored evidence and therefore rebuild strict
+  // entries, while retained steps may grow exclusions when their ordinary
+  // re-resolution conditions hold. Rejected attempts restore exact
+  // grounding text, including its version and exclusions, from the overlay.
+  // The initial AI-enabled replay uses the same rules. Replaced steps in
+  // tail repair, full regeneration, and generate start strict, without
+  // exclusions; discarded evidence is not recovered to infer them.
   const measurement = await measureReplay(deps, options, file, overlay, plan, true, nextAttemptOrdinal());
   if (measurement.interrupted || measurement.firstFailureIndex <= baseline.firstFailureIndex) {
     overlay.restore(snapshot);

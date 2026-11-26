@@ -224,7 +224,7 @@ describe('TEST-COMP-8 stable cache-hit evidence', () => {
     const hits = {
       legacy: entry(click('legacy')),
       components: { ...entry(click('components')), components: staleComponents },
-      ignored: { ...entry(click('ignored')), components: staleComponents, ignoredNames: ['siblingAfter'] },
+      ignored: { ...entry(click('ignored')), components: { ...components, siblingAfterName: staleComponents.siblingAfterName }, ignoredNames: ['siblingAfter'] },
     };
     const f = await fixture({ version: 5, steps: [...Object.keys(hits).map(id => click(id)), click('different')], entries: hits });
     expect((await replay(f, true, true)).results[0]?.result.status).toBe('passed');
@@ -236,10 +236,10 @@ describe('TEST-COMP-8 stable cache-hit evidence', () => {
     }
   });
   it.each((['legacy', 'components', 'ignored'] as const).flatMap(shape => [false, true].map(resolve => ({ shape, resolve }))))('retains $shape entry bytes across two runs (resolve=$resolve)', async ({ shape, resolve }) => {
-    // A hit must preserve recorded evidence even when its component hashes no
-    // longer describe the live screen; schema validation promises shape only.
+    // Strict hits retain even inconsistent components; relaxed hits require
+    // agreement outside the excluded names to exercise byte retention.
     const staleComponents = { ...components, structure: 'c'.repeat(64), parentName: 'd'.repeat(64), siblingAfterName: 'e'.repeat(64) };
-    const stored = { ...entry(), ...(shape === 'legacy' ? {} : { components: staleComponents }), ...(shape === 'ignored' ? { ignoredNames: ['siblingAfter'] } : {}) };
+    const stored = { ...entry(), ...(shape === 'legacy' ? {} : { components: shape === 'ignored' ? { ...components, siblingAfterName: staleComponents.siblingAfterName } : staleComponents }), ...(shape === 'ignored' ? { ignoredNames: ['siblingAfter'] } : {}) };
     const f = await fixture({ version: 5, entries: { click: stored } });
     for (let n = 0; n < 2; n++) {
       expect((await replay(f, resolve, true)).results[0]?.result.status).toBe('passed');
@@ -249,21 +249,3 @@ describe('TEST-COMP-8 stable cache-hit evidence', () => {
   });
 });
 
-// This temporary layer-1 contract is replaced by TEST-RELAX-2 in layer 2.
-describe('TEST-COMP-10 strict matching despite stored ignored names', () => {
-  it('accepts the entry shape but rejects neighbor-name drift with fingerprint-mismatch', async () => {
-    const f = await fixture({ version: 5, entries: { click: { ...entry(), components, ignoredNames: ['siblingAfter'] } } });
-    expect(readGroundingDocument(f.document)).toEqual(f.document);
-    const changedTree: JsonValueT = { role: 'root', name: '', children: [{ role: 'button', name: 'Submit', children: [] }, { role: 'button', name: 'Changed', children: [] }] };
-    const observed = computeAccessibilityFingerprint(changedTree, SUBMIT, []);
-    if (observed.kind !== 'ok') throw new Error('Changed fixture must remain uniquely hashable.');
-    const changed = createFakeBrowserSession(liveEntries([SUBMIT], observed.fingerprint), { snapshot: { accessibilityTree: changedTree, screenshot: new Uint8Array([1]) } });
-    const verify = vi.spyOn(changed, 'resolveGrounded');
-    const outcome = await run({ ...f.deps, uiExecutor: () => createFakeUiExecutor(() => changed) }, { ...DEFAULT_OPTIONS, resolve: false });
-    expect(outcome.results[0]?.error).toMatchObject({ details: { reason: 'recoverable-miss' } });
-    expect(outcome.results[0]?.result.status).toBe('error');
-    expect(verify).toHaveBeenCalled();
-    await expect(verify.mock.results[0]!.value).resolves.toMatchObject({ kind: 'miss', reason: 'fingerprint-mismatch' });
-    expect(f.resolveAiExecutor).not.toHaveBeenCalled();
-  });
-});

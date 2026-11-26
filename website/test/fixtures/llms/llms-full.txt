@@ -3016,7 +3016,9 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 
 ## Text that changes between runs {#changing-neighbor-text}
 
-With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once; rerun `ambercast run --resolve`, and after write-back, this element replays without AI.
+With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, neighboring text no longer stops this element.
+This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.
@@ -4431,7 +4433,9 @@ Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading struct
 
 ## Text that changes between runs {#changing-neighbor-text}
 
-With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once; rerun `ambercast run --resolve`, and after write-back, this element replays without AI.
+With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, neighboring text no longer stops this element.
+This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.

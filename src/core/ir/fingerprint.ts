@@ -152,16 +152,16 @@ export type FingerprintComparison =
  * @returns A hit with the current full fingerprint, or a hash-only mismatch.
  * @throws If ignored names are supplied without components.
  * @remarks
- * Without ignored names, full fingerprint equality will remain mandatory.
- * With them, structure and every non-ignored slot's name hash will have to
- * agree; ignoring all three slots will therefore compare structure alone.
- * Only stored components will justify difference diagnostics: structural
- * drift will take precedence, otherwise differing non-ignored slots will
+ * Without ignored names, full fingerprint equality remains mandatory.
+ * With them, structure and every non-ignored slot's name hash have to
+ * agree; ignoring all three slots therefore compares structure alone.
+ * Only stored components justify difference diagnostics: structural
+ * drift takes precedence, otherwise differing non-ignored slots
  * explain a neighbor-name mismatch. A differing full fingerprint with equal
- * components will remain a plain mismatch, never a repaired record. An
- * ignored-name comparison will not consult full fingerprint equality.
- * This single pure rule will be shared by real and fake browser boundaries;
- * neither boundary will choose additional names to ignore.
+ * components remains a plain mismatch, never a repaired record. An
+ * ignored-name comparison does not consult full fingerprint equality.
+ * This single pure rule is shared by real and fake browser boundaries;
+ * neither boundary chooses additional names to ignore.
  */
 export function compareAccessibilityFingerprint(
   stored: StoredFingerprintEvidence,
@@ -201,10 +201,10 @@ export function compareAccessibilityFingerprint(
  * or invalid-snapshot classification.
  * @throws If ignored names lack components, or unexpected hashing fails.
  * @remarks
- * Match-count and malformed-evidence gates will precede comparison, so a
+ * Match-count and malformed-evidence gates precede comparison, so a
  * neighborhood hash cannot select among duplicate locators. Verification
- * will add no secret-taint check: generation owns that boundary. The strict
- * resolveAccessibilityFingerprint path will remain available for continuity
+ * adds no secret-taint check: generation owns that boundary. The strict
+ * resolveAccessibilityFingerprint path remains available for continuity
  * checks within one execution.
  */
 export function verifyAccessibilityFingerprint(

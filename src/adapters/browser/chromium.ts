@@ -564,13 +564,13 @@ class ChromiumBrowserSession implements BrowserSession {
    * untouched for the later stable capture.
    */
   async resolveGrounded(ref: ElementRef, query: GroundingQuery): Promise<GroundedResolution> {
-    // Verify will delegate stored evidence to the shared core comparison,
+    // Verify delegates stored evidence to the shared core comparison,
     // preserving absence, ambiguity, and invalid-snapshot outcomes. Invalid
-    // queries, including ignoredNames without components, will throw rather
-    // than masquerade as misses. Only fingerprint mismatches will carry the
+    // queries, including ignoredNames without components, throw rather
+    // than masquerade as misses. Only fingerprint mismatches carry the
     // core's optional difference and changed-slot evidence; absent diagnostic
-    // fields will stay omitted. This adapter will never add exclusions.
-    // A hit will mint its live handle from the current full fingerprint, so
+    // fields stay omitted. This adapter never adds exclusions.
+    // A hit mints its live handle from the current full fingerprint, so
     // later continuity checks compare against the observation actually bound,
     // even when stored neighboring names were excluded across executions.
     assertLegalGroundingQuery(query);
@@ -656,8 +656,8 @@ class ChromiumBrowserSession implements BrowserSession {
    * behavior and do not inherit secret-sink policy concerns.
    */
   private async reverifyBinding(target: BoundElement): Promise<ReverifiedBinding> {
-    // Continuity will remain strict against the handle's full fingerprint.
-    // Even an excluded neighbor changing after bind will refuse the action
+    // Continuity remains strict against the handle's full fingerprint.
+    // Even an excluded neighbor changing after bind causes action refusal
     // with the existing rejection classification, message, and exit behavior;
     // cross-execution exclusions must not authorize retrying a failed action.
     const record = this.#bindings.get(target);

@@ -185,9 +185,9 @@ export function rawGroundingHasCoverageClaim(sourceText: string): boolean {
  * allowing each caller to classify it independently preserves the fail-closed
  * provenance boundary and prevents replay and check from drifting apart.
  */
-// The accepted document type will include the shared reader's declared-version
+// The accepted document type includes the shared reader's declared-version
 // result. Canonical comparison must precede conversion to the write version,
-// otherwise a canonical legacy coverage claim would fail solely on its version.
+// otherwise a canonical legacy coverage claim fails solely on its version.
 export function isGroundingCanonicalForClaim(
   sourceText: string,
   parsedDocument: GroundingDocumentType,

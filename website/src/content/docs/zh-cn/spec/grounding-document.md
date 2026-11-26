@@ -9,7 +9,7 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `4` | 定位缓存格式版本。| `src/core/ir/schema.ts:74,1754` |
+| `schemaVersion` | integer | 必填 | 字面量 `5` | 定位缓存格式版本。| `src/core/ir/schema.ts:74,1754` |
 | `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联执行计划的摘要。| `src/core/ir/schema.ts:35,1755` |
 | `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 定位缓存。| `src/core/ir/schema.ts:1756` |
 

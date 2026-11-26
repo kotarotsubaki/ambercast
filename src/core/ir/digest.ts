@@ -167,7 +167,7 @@ export function computePlanDigest(plan: PlanDocument): string {
  * @param planDigest - The digest calculated for the plan under consideration.
  * @returns `true` only when both provenance values are identical.
  */
-// Provenance equality will accept validated read-version documents, so legacy
+// Provenance equality accepts validated read-version documents, so legacy
 // compatibility does not require changing their version before canonical checks.
 export function isPlanDigestCurrent(
   grounding: ReadGroundingDocument,

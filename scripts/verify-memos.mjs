@@ -43,7 +43,7 @@ const CONFIG = 'ambercast.config.json';
  */
 export const CASES = Object.freeze([
   { id: 'memos-sign-in-create-memo', target: 'memos' },
-  { id: 'memos-edit-memo', target: 'memos', knownIssue: 632 },
+  { id: 'memos-edit-memo', target: 'memos', knownIssue: 722 },
   { id: 'memos-delete-memo', target: 'memos' },
   { id: 'memos-search-memos', target: 'memos' },
   { id: 'memos-tag-filter', target: 'memos' },

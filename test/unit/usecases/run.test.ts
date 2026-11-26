@@ -125,7 +125,7 @@ describe('Issue596 grounding v4', () => {
       { id: 'confirm-memo', kind: 'assert', check: 'text-visible', text: 'Done', confirms: ['fill-memo'] },
     ]);
     const groundingPath = deps.layout.groundingPathFor(testPath);
-    const empty: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
+    const empty: GroundingDocument = { schemaVersion: 5, planDigest: computePlanDigest(plan), entries: {} };
     if (options.existing) await base.recordingStorage.storage.writeText(groundingPath, toCanonicalArtifactText(empty as unknown as JsonValueT));
     return { ...base, deps, session, executor, plan, testPath, groundingPath, empty };
   }
@@ -187,7 +187,7 @@ describe('Issue596 grounding v4', () => {
     await f.recordingStorage.storage.writeText(f.groundingPath, toCanonicalArtifactText({ ...f.empty, schemaVersion } as unknown as JsonValueT));
     expect((await run(f.deps, { ...DEFAULT_OPTIONS, updateCache: true })).results[0]?.result.status).toBe('passed');
     expect(f.executor.structuredRequests).toHaveLength(1);
-    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).schemaVersion).toBe(4);
+    expect((await readGrounding(f.recordingStorage.storage, f.testPath)).schemaVersion).toBe(5);
   });
   it('TEST-8 replays exact saved bytes with zero AI calls and persists byte-identically on repeat', async () => {
     const f = await fixture();
@@ -219,7 +219,7 @@ describe('Issue596 grounding v4', () => {
     assertZeroAiCalls(report(outcome));
   });
   it('TEST-9 rejects an invalid locator role at serialization', () => {
-    const document = { schemaVersion: 4, planDigest: 'a'.repeat(64), entries: { invalid: { kind: 'element', locator: { ...unnamed, role: '' }, fingerprint: FINGERPRINT, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' } } } as GroundingDocument;
+    const document = { schemaVersion: 5, planDigest: 'a'.repeat(64), entries: { invalid: { kind: 'element', locator: { ...unnamed, role: '' }, fingerprint: FINGERPRINT, intentDigest: 'b'.repeat(64), provenance: 'ai-proposed' } } } as GroundingDocument;
     expect(() => serializePersistableGrounding(document)).toThrow(IntegrityViolationError);
     expect(() => serializePersistableGrounding(document)).toThrow('The grounding cache does not satisfy the grounding schema.');
   });
@@ -253,7 +253,7 @@ describe('Issue596 grounding v4', () => {
     // must retain their real canonicalization paths.
     const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
       const document = value as unknown as GroundingDocument;
-      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+      if (document.schemaVersion === 5 && document.entries?.['fill-memo'] !== undefined) {
         persistenceAttempts += 1;
         throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
       }
@@ -284,7 +284,7 @@ describe('Issue596 grounding v4', () => {
     // so this tests error preservation after a real persistence attempt.
     const canonicalize = vi.spyOn(canonicalJson, 'toCanonicalArtifactText').mockImplementation((value) => {
       const document = value as unknown as GroundingDocument;
-      if (document.schemaVersion === 4 && document.entries?.['fill-memo'] !== undefined) {
+      if (document.schemaVersion === 5 && document.entries?.['fill-memo'] !== undefined) {
         persistenceAttempts += 1;
         throw new RangeError('Cannot canonicalize a string with an unpaired surrogate.');
       }
@@ -439,9 +439,9 @@ describe('TEST-R11 report and event vocabulary', () => {
     }
   });
 
-  it('advances grounding to v4 while preserving plan and report versions', () => {
+  it('advances grounding to v5 while preserving plan and report versions', () => {
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(5);
     expect(REPORT_SCHEMA_VERSION).toBe('3.12');
   });
 
@@ -2028,7 +2028,11 @@ describe('run', () => {
       expect(wideOutcome.results[0]?.result.status).toBe('passed');
       expect(wideSession.operations()).toContainEqual({
         type: 'fill-secret',
-        target: boundTarget(PASSWORD, wideFingerprint),
+        target: { ...boundTarget(PASSWORD, wideFingerprint), components: (() => {
+          const result = computeAccessibilityFingerprint(wideSnapshot.accessibilityTree, PASSWORD, []);
+          if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
+          return result.components;
+        })() },
         value: SECRET_VALUE,
         policy: {
           secretRef: SECRET_REF,
@@ -3071,7 +3075,7 @@ describe('run', () => {
       const outcome = await run(f.deps, DEFAULT_OPTIONS);
       expect(outcome.results[0]?.result.status).toBe('passed');
       // SPEC-SAVE-1 saves the fresh binding on completion even without a confirmer.
-      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toEqual(hitEntry);
+      expect((await readGrounding(f.recordingStorage.storage, f.testPath)).entries['click-submit']).toEqual({ ...hitEntry, components: fingerprintResult.components });
       expect(await f.recordingStorage.storage.readText(f.groundingPath)).not.toBe(f.before);
     });
   });
@@ -5045,6 +5049,11 @@ describe('run agentic fallback pipeline', () => {
 
 describe('run path-B element recovery', () => {
   const clickDigest = computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
+  const pathBComponents = () => {
+    const result = computeAccessibilityFingerprint(pathBSnapshot().accessibilityTree, SUBMIT, []);
+    if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
+    return result.components;
+  };
   const storedClick = (fingerprint: Fingerprint = FINGERPRINT) => elementGrounding(['click-submit'], {}, fingerprint, { 'click-submit': clickDigest });
   const foundSubmit = () => ({ data: { proposal: { outcome: 'found' as const, role: 'button', name: 'Submit' } }, raw: '{"proposal":{"outcome":"found","role":"button","name":"Submit"}}' });
 
@@ -5254,14 +5263,14 @@ describe('run path-B element recovery', () => {
     expect(JSON.stringify(executor.structuredRequests[0]?.responseSchema)).not.toContain('fingerprint');
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
       ...elementGrounding(['fill-password-secret'], {}, FINGERPRINT, { 'fill-password-secret': PASSWORD_FILL_SECRET_DIGEST }),
-      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], components: pathBComponents(), provenance: 'ai-proposed' },
     });
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: PASSWORD, query: { mode: 'verify', fingerprint: FINGERPRINT } },
       { type: 'fill-secret', target: boundTarget(PASSWORD, FINGERPRINT), value: secretValue, policy: baseUrlSecretPolicy(secretRef, TARGETS.web) },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: FINGERPRINT } },
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
-      { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'perform', action: { type: 'click', target: { ...boundTarget(SUBMIT, expectedFingerprint), components: pathBComponents() } } },
       { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
     expect(events.emitted().filter((event) => event.type === 'step-result')).toEqual([
@@ -5371,11 +5380,11 @@ describe('run path-B element recovery', () => {
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toEqual({
-      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], components: pathBComponents(), provenance: 'ai-proposed' },
     });
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
-      { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'perform', action: { type: 'click', target: { ...boundTarget(SUBMIT, expectedFingerprint), components: pathBComponents() } } },
       { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
   });
@@ -5852,11 +5861,11 @@ describe('run path-B element recovery', () => {
     expect(aiCalls(events)).toEqual([expectedAiCall('ai-1', 'click-submit')]);
     expect(executor.structuredRequests).toHaveLength(1);
     expect((await readGrounding(recordingStorage.storage, testPath)).entries).toStrictEqual({
-      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], provenance: 'ai-proposed' },
+      'click-submit': { ...storedClick(expectedFingerprint)['click-submit'], components: pathBComponents(), provenance: 'ai-proposed' },
     });
     expect(session.operations()).toEqual([
       { type: 'resolve-grounded', target: SUBMIT, query: { mode: 'verify', fingerprint: expectedFingerprint } },
-      { type: 'perform', action: { type: 'click', target: boundTarget(SUBMIT, expectedFingerprint) } },
+      { type: 'perform', action: { type: 'click', target: { ...boundTarget(SUBMIT, expectedFingerprint), components: pathBComponents() } } },
       { type: 'evaluate-assert', check: { check: 'text-visible', text: 'Dashboard' } },
     ]);
   });

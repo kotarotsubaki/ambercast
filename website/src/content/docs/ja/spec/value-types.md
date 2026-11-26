@@ -28,6 +28,12 @@ description: "この章は、他の章が名前で参照する共有オブジェ
 | `QuotedElementIntent` (`ElementIntent` を拡張) | `quote` | `Quote` | required | strict nested object | 必須の UI テキスト引用。 | `src/core/ir/schema.ts:424` |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | `src/core/ir/schema.ts:320` |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | `src/core/ir/schema.ts:35,321` |
+| `FingerprintComponents` | `algorithm` | string | required | literal `a11y-components-v1` | 成分のアルゴリズム。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `structure` | `HexSha256` | required | lowercase SHA-256 | 対象名と近傍のロール。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `parentName` | `HexSha256` | required | lowercase SHA-256 | 直接の親の名前。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingBeforeName` | `HexSha256` or null | required | null iff sibling absent | 直前の兄弟名。存在しなければ null。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingAfterName` | `HexSha256` or null | required | null iff sibling absent | 直後の兄弟名。存在しなければ null。 | `src/core/ir/schema.ts:1462-1481` |
+| `FingerprintNameSlot` | — | string | value | enum `parent`, `siblingBefore`, `siblingAfter` | 隣接要素の名前のスロットを表す固定順の語彙。 | `src/core/ir/schema.ts:1457` |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | `src/core/ir/schema.ts:372` |
 |  | `startColumn` | integer | required | positive | 1始まりのUTF-16開始列。 | `src/core/ir/schema.ts:373` |
 |  | `endLine` | integer | required | positive | 1始まりのUTF-16終了行。 | `src/core/ir/schema.ts:374` |

@@ -178,7 +178,7 @@ export async function seedFreshArtifacts(
 ): Promise<void> {
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const plan = await createFreshPlan(storage, testPath, steps, targetDefinitions);
-  const grounding: GroundingDocument = { schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} };
+  const grounding: GroundingDocument = { schemaVersion: 5, planDigest: computePlanDigest(plan), entries: {} };
 
   await storage.writeText(
     layout.groundingPathFor(testPath),

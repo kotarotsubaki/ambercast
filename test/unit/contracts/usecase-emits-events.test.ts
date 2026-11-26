@@ -89,7 +89,7 @@ registerUsecaseEmitsEventsContract([
         steps: [{ id: 'navigate-home', kind: 'action', action: 'navigate', target: 'web', url: '/' }],
       });
       const grounding: GroundingDocument = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         planDigest: computePlanDigest(plan),
         entries: {},
       };

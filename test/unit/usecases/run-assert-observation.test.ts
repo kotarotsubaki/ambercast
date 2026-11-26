@@ -78,7 +78,7 @@ async function fixture(steps: readonly TestStep[], options: {
     const ref = step.kind === 'capture' ? EMAIL : step.action === 'fill' || step.action === 'fill-secret' ? EMAIL : SUBMIT;
     const fp = computeAccessibilityFingerprint(tree(), ref, []);
     if (fp.kind !== 'ok') throw new Error('Fixture element needs a unique fingerprint.');
-    entries[step.id] = { kind: 'element', locator: ref, fingerprint: fp.fingerprint, provenance: 'quoted-match',
+    entries[step.id] = { kind: 'element', locator: ref, fingerprint: fp.fingerprint, components: fp.components, provenance: 'quoted-match',
       intentDigest: computeIntentDigest({ stepKind: step.kind, operation: step.kind === 'capture' ? 'capture' : step.action, intent: step.intent }) };
   }
   const executor = createFakeAiExecutor({ executeAgentic: async (request) => {
@@ -227,7 +227,7 @@ describe('assertion observations', () => {
         const ref = step.action === 'fill' ? EMAIL : SUBMIT;
         const fp = computeAccessibilityFingerprint(tree(), ref, []);
         if (fp.kind !== 'ok') throw new Error('Expected unique fixture fingerprint.');
-        expect(document.entries[step.id]).toEqual({ kind: 'element', locator: ref, fingerprint: fp.fingerprint,
+        expect(document.entries[step.id]).toEqual({ kind: 'element', locator: ref, fingerprint: fp.fingerprint, components: fp.components,
           provenance: 'quoted-match', intentDigest: computeIntentDigest({ stepKind: 'action', operation: step.action, intent: step.intent }) });
       }
     }

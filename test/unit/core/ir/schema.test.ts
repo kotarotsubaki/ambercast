@@ -1184,7 +1184,7 @@ describe('PlanDocument', () => {
     expectAccepted(PlanDocument, plan([]));
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 3 });
     expectRejected(PlanDocument, { ...plan([]), schemaVersion: 4 });
-    expectAccepted(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: {} });
+    expectAccepted(GroundingDocument, { schemaVersion: 5, planDigest: DIGEST_B, entries: {} });
     expectRejected(GroundingDocument, { schemaVersion: 1, planDigest: DIGEST_B, entries: {} });
   });
 
@@ -1260,14 +1260,14 @@ describe('PlanDocument', () => {
 });
 
 describe('GroundingDocument', () => {
-  it('accepts an unnamed v4 element locator while rejecting retired v3', () => {
+  it('accepts an unnamed v5 element locator while rejecting retired v3', () => {
     const entry = {
       kind: 'element', locator: { strategy: 'accessibility', role: 'textbox', name: '' },
       fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A },
       intentDigest: DIGEST_B, provenance: 'ai-proposed',
     };
     expectAccepted(ElementGroundingEntryV4, entry);
-    const document = { schemaVersion: 4, planDigest: DIGEST_B, entries: { memo: entry } };
+    const document = { schemaVersion: 5, planDigest: DIGEST_B, entries: { memo: entry } };
     expectAccepted(GroundingDocument, document);
     expectRejected(GroundingDocument, { ...document, schemaVersion: 3 });
   });
@@ -1291,7 +1291,7 @@ describe('GroundingDocument', () => {
   // coverage rather than relying on digest.test.ts's createGrounding() helper.
   it('accepts an element grounding entry with a fingerprint', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1307,7 +1307,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an empty entries record for a freshly generated cold-grounding artifact', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {},
     });
@@ -1315,7 +1315,7 @@ describe('GroundingDocument', () => {
 
   it('accepts an AI grounding entry with a populated trace', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1331,7 +1331,7 @@ describe('GroundingDocument', () => {
 
   it('accepts a document with mixed element and AI grounding entries', () => {
     expectAccepted(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         'login-flow': {
@@ -1353,11 +1353,11 @@ describe('GroundingDocument', () => {
   });
 
   it('rejects wrong document fields, invalid entry keys, and unknown properties', () => {
-    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: 'b'.repeat(63), entries: {} });
-    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
-    expectRejected(GroundingDocument, { schemaVersion: 4, planDigest: DIGEST_B, entries: {}, unexpected: true });
+    expectRejected(GroundingDocument, { schemaVersion: 5, planDigest: 'b'.repeat(63), entries: {} });
+    expectRejected(GroundingDocument, { schemaVersion: 5, planDigest: DIGEST_B, entries: { '1': { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } } } });
+    expectRejected(GroundingDocument, { schemaVersion: 5, planDigest: DIGEST_B, entries: {}, unexpected: true });
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element', fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A }, unexpected: true },
@@ -1367,7 +1367,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry without a kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: { fingerprint: { algorithm: 'a11y-neighborhood-v2', hash: DIGEST_A } },
@@ -1377,7 +1377,7 @@ describe('GroundingDocument', () => {
 
   it('rejects a grounding entry with an unknown kind', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'widget' },
@@ -1387,7 +1387,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry with a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1401,7 +1401,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry with a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: {
@@ -1418,7 +1418,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an element grounding entry without a fingerprint', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'element' },
@@ -1428,7 +1428,7 @@ describe('GroundingDocument', () => {
 
   it('rejects an AI grounding entry without a trace', () => {
     expectRejected(GroundingDocument, {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: DIGEST_B,
       entries: {
         step: { kind: 'ai' },

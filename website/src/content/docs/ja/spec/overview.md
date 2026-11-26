@@ -5,7 +5,7 @@ description: "本仕様は、ambercast 0.10.0 が受け付けるアーティフ�
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
+本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 5 を受け付ける。v4のグラウンディングも読み取れる（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
 
 ## 規範的文言 {#normative-language}
 
@@ -36,7 +36,7 @@ description: "本仕様は、ambercast 0.10.0 が受け付けるアーティフ�
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
 | 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
-| グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| グラウンディングの `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
 | Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 

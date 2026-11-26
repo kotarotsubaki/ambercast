@@ -6,6 +6,7 @@
 import type {
   ElementRef,
   Fingerprint,
+  FingerprintComponents,
   JsonValueT,
   TargetDefinition,
   TracePress,
@@ -113,6 +114,8 @@ export interface BoundElement {
    * rather than consulting this public field.
    */
   readonly fingerprint: Fingerprint;
+  /** Component evidence captured with this binding's fingerprint. */
+  readonly components?: FingerprintComponents;
 }
 
 /**
@@ -269,6 +272,8 @@ export type GroundedResolution =
   | {
       /** The recorded reference remains valid for the current page. */
       readonly kind: 'hit';
+      /** Component evidence from this binding observation, when available. */
+      readonly components?: FingerprintComponents;
       /** The live, session-local handle confirmed by this bind. */
       readonly element: BoundElement;
     }

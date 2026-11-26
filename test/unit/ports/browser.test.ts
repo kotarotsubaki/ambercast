@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { ElementRef, Fingerprint, JsonValueT, TargetDefinition } from '../../../src/core/ir/schema.js';
+import type { ElementRef, FingerprintComponents, Fingerprint, JsonValueT, TargetDefinition } from '../../../src/core/ir/schema.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type {
   AccessibilityCapture,
@@ -49,7 +49,7 @@ describe('browser port shapes', () => {
     >();
     expectTypeOf<CaptureMode>().toEqualTypeOf<'text' | 'value'>();
     expectTypeOf<GroundedResolution>().toEqualTypeOf<
-      | { readonly kind: 'hit'; readonly element: BoundElement }
+      | { readonly kind: 'hit'; readonly element: BoundElement; readonly components?: FingerprintComponents }
       | {
           readonly kind: 'miss';
           readonly reason: 'fingerprint-mismatch' | 'element-not-found' | 'ambiguous-match' | 'snapshot-invalid' | 'secret-contaminated';
@@ -58,6 +58,7 @@ describe('browser port shapes', () => {
     expectTypeOf<BoundElement>().toEqualTypeOf<{
       readonly ref: ElementRef;
       readonly fingerprint: Fingerprint;
+      readonly components?: FingerprintComponents;
     }>();
     expectTypeOf<GroundingQuery>().toEqualTypeOf<
       | { readonly mode: 'verify'; readonly fingerprint: Fingerprint }

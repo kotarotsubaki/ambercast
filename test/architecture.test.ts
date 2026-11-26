@@ -1083,12 +1083,14 @@ describe('architecture guardrails', () => {
         expectedSites: [
           { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
           { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'comparison' },
+          { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
         ],
         fileName: RUN_MODULE_FILE,
         usecase: 'run',
       },
       {
         expectedSites: [
+          { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
           { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
           { authority: 'GROUNDING_SCHEMA_VERSION', kind: 'property' },
         ],

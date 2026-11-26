@@ -197,7 +197,7 @@ async function writeGrounding(
   entries: GroundingDocument['entries'] = {},
   planDigest = computePlanDigest(plan),
 ): Promise<void> {
-  const grounding: GroundingDocument = { schemaVersion: 4, planDigest, entries };
+  const grounding: GroundingDocument = { schemaVersion: 5, planDigest, entries };
   await storage.writeText(
     layout.groundingPathFor(testPath),
     toCanonicalArtifactText(grounding as unknown as JsonValueT),

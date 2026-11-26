@@ -2172,10 +2172,10 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | --- | --- | --- | --- | --- | --- | --- |
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がない） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
-| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
+| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json` | 5 | `ambercast grounding schema v5` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
-廃止された契約の利用者のために、凍結済みのスナップショットを 5 つ残している。サイトはコミット済みのファイルからこれらを公開し、npm パッケージはエクスポートしない。
+6つの凍結スナップショットが旧契約を保持する。v4のグラウンディングは引き続き読み取れる。サイトはコミット済みのファイルからこれらを公開し、npm パッケージはエクスポートしない。
 
 | artifact | 公開パスと `$id` | バージョン | `title` | `description` | スコープ | 状態 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2184,6 +2184,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | plan （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 廃止された契約の利用者のために保持する、凍結済みの 計画 v4 スナップショット。 | 利用可能 |
 | grounding （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持する、凍結済みの グラウンディング v2 スナップショット。 | 利用可能 |
 | grounding （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | 廃止された契約の利用者のために保持する、凍結済みの グラウンディング v3 スナップショット。 | 利用可能 |
+| grounding （履歴スナップショット） | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | 読み取り可能なv4契約を保持する、凍結済みの グラウンディング v4 スナップショット。 | 利用可能 |
 
 各 `$id` は公開パスの URL と一致する。サイトは現在の 4 つのスキーマを、`dist/schema/` のファイルとバイト単位で同一のコピーとして配信する。npm パッケージはこの 4 つを `ambercast/schema/<name>.json` としてエクスポートする。
 
@@ -2194,7 +2195,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | 生成ファイル | 検証対象 | 生成元 | npm エクスポート |
 | --- | --- | --- | --- |
 | `plan.schema.json` | 計画の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 に変換した Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | グラウンディングの `schemaVersion` が 4 であり、`planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 に変換した Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `grounding.schema.json` | グラウンディングの `schemaVersion` が 5 であり、`planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 に変換した Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須で、宣言される設定はそれ以外すべて任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 に変換した Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | Report の `schemaVersion` 3.12 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
@@ -3276,7 +3277,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 
 ## ステータス {#status}
 
-本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 4 を受け付ける（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
+本仕様は、ambercast 0.10.0 が受け付けるアーティファクトについて記述する。本実装は、計画（plan）のスキーマバージョン 5 と、グラウンディングのスキーマバージョン 5 を受け付ける。v4のグラウンディングも読み取れる（`src/core/ir/schema.ts:62`、`src/core/ir/schema.ts:74`）。
 
 ## 規範的文言 {#normative-language}
 
@@ -3307,7 +3308,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 | アーティファクト | 受け付ける値 | 根拠 |
 | --- | --- | --- |
 | 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
-| グラウンディングの `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| グラウンディングの `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
 | Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 
@@ -3673,6 +3674,12 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/value-types/
 | `QuotedElementIntent` (`ElementIntent` を拡張) | `quote` | `Quote` | required | strict nested object | 必須の UI テキスト引用。 | `src/core/ir/schema.ts:424` |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | ロケータエビデンスの形式。 | `src/core/ir/schema.ts:320` |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小文字のSHA-256。 | `src/core/ir/schema.ts:35,321` |
+| `FingerprintComponents` | `algorithm` | string | required | literal `a11y-components-v1` | 成分のアルゴリズム。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `structure` | `HexSha256` | required | lowercase SHA-256 | 対象名と近傍のロール。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `parentName` | `HexSha256` | required | lowercase SHA-256 | 直接の親の名前。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingBeforeName` | `HexSha256` or null | required | null iff sibling absent | 直前の兄弟名。存在しなければ null。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingAfterName` | `HexSha256` or null | required | null iff sibling absent | 直後の兄弟名。存在しなければ null。 | `src/core/ir/schema.ts:1462-1481` |
+| `FingerprintNameSlot` | — | string | value | enum `parent`, `siblingBefore`, `siblingAfter` | 隣接要素の名前のスロットを表す固定順の語彙。 | `src/core/ir/schema.ts:1457` |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 1始まりのUTF-16開始行。 | `src/core/ir/schema.ts:372` |
 |  | `startColumn` | integer | required | positive | 1始まりのUTF-16開始列。 | `src/core/ir/schema.ts:373` |
 |  | `endLine` | integer | required | positive | 1始まりのUTF-16終了行。 | `src/core/ir/schema.ts:374` |
@@ -3735,23 +3742,53 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | グラウンディングフォーマットのバージョン。 | `src/core/ir/schema.ts:74,1754` |
+| `schemaVersion` | integer | required | literal `5` | グラウンディングフォーマットのバージョン。 | `src/core/ir/schema.ts:74,1754` |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | `src/core/ir/schema.ts:35,1755` |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | `src/core/ir/schema.ts:1756` |
+
+## バージョン互換性 {#version-compatibility}
+
+読み手は、v4文書を元のv4の形で検証して受け入れる。v4の要素エントリは `components` と `ignoredNames` を含んではならない（MUSTNOT）。
+
+公開するv5スキーマはv5だけを受け入れ、凍結したv4スキーマが読み取り可能な旧形式を表す。
+
+新しく書く文書はv5になる。何も書き換えない実行は、版を含めてファイルを変更してはならない（MUSTNOT）。
+
+一致した既存エントリは変更せず、成分も追加しない。別のエントリの書き戻しが必要な場合、未変更のv4エントリは成分のないままv5文書に残る。新たに解決して確定した要素の束縛は、束縛時に観測した成分を記録する。
+
+エントリの保持は正準値で比較する。文書の書き込みでは、元の非正準な表記を正規化する場合がある。
 
 ## エントリバリアント {#entry-variants}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element エントリの識別子。 | `src/core/ir/schema.ts:1443` |
+| `ElementGroundingEntryV5` | `kind` | string | required | literal `element` | Element エントリの識別子。 | `src/core/ir/schema.ts:1443` |
 |  | `locator` | `GroundingElementLocator` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | `src/core/ir/schema.ts:1444` |
 |  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | `src/core/ir/schema.ts:1445` |
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | `src/core/ir/schema.ts:1447` |
+|  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 構造とスロット名のハッシュ。 | `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | スロット一覧。照合は完全な指紋を用いる。 | `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | `src/core/ir/schema.ts:1465` |
 
 `GroundingEntry` は、この 2 つの厳密な形状を `kind` で区別する共用体である。AI エントリがないことは、トレースを記録していないことを意味する。検証が空の `ai` エントリは無効である（`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`）。
+
+## 成分 {#components}
+
+`components` は省略可能な厳格な `FingerprintComponents` レコードである。`algorithm`、`structure`、`parentName`、`siblingBeforeName`、`siblingAfterName` の5項目をすべて持つ。`algorithm` は `a11y-components-v1` でなければならない（MUST）。
+
+各ハッシュは小文字の16進数の SHA-256 とする。兄弟が存在しない場合、その名前のハッシュは `null` としなければならない（MUST）。項目の省略は認めない。
+
+`parentName` は常にハッシュである。
+
+`ignoredNames` は省略可能な空でないスロット一覧である。重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。`ignoredNames` を持つエントリは `components` を持たなければならない（MUST）。
+
+列挙したスロットの名前のハッシュは `null` であってはならない（MUSTNOT）。生成側は空の一覧を項目ごと省かなければならない（MUST）。
+
+未知の成分項目や不正なエントリが1件でもあると、文書全体が不適合になる。スキーマ検証の対象は形と組合せであり、指紋と成分が同じ観測から得られたかは検証しない。
+
+現在の実装は `ignoredNames` を書き込まない。保存済みのエントリに `ignoredNames` がある場合も、照合には完全な指紋を用いる。
 
 ## トレースレコード {#trace-record}
 
@@ -3788,7 +3825,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -3813,7 +3850,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 グラウンディングのバージョン 2 と 3 は廃止した。`check` は、コミット済みのポリシーではスキーマ検証の前に `stale-grounding` を報告し、未コミットのポリシーでは `fresh-without-grounding` を報告する。`--resolve` なしの `run` は、計画のダイジェストが一致し、要素ステップにグラウンディングが必要な場合、`GROUNDING_UNRESOLVED` を `recoverable-miss` として報告する。ダイジェストが異なる場合は `missing` になる。
 
-`run --resolve` は空のキャッシュから始まり、既存の書き戻しの条件のもとで v4 を保存できる。`generate` は、変更のない新しい計画に対して、廃止したキャッシュを空の v4 グラウンディングに置き換える。`heal` は、`ambercast run --resolve --update-cache` でキャッシュを再生成するまで `FS_IO_ERROR` を報告する。バージョン 1 と未知のバージョンは、`check` では無効のまま、`run` ではキャッシュミスのままである。
+`run --resolve` は空のキャッシュから始まり、既存の書き戻しの条件のもとで v5 を保存できる。`generate` は、変更のない新しい計画に対して、廃止したキャッシュを空の v5 グラウンディングに置き換える。`heal` は、`ambercast run --resolve --update-cache` でキャッシュを再生成するまで `FS_IO_ERROR` を報告する。バージョン 1 と未知のバージョンは、`check` では無効のまま、`run` ではキャッシュミスのままである。
 
 ## 設計根拠 {#rationale}
 
@@ -3847,6 +3884,29 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/
 7. 小文字の 16 進数の出力を v2 タグとともに保存する。
 
 子孫と、隣接しない兄弟は、プリイメージに含めてはならない（MUST NOT）（`src/core/ir/fingerprint.ts:46-50`）。
+
+## 成分 {#components}
+
+省略可能な `components` レコードは `a11y-components-v1` を用い、完全な指紋と同じ正規化済みの記述子から作る。各ハッシュは、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)の正準 UTF-8 JSON の SHA-256 を小文字の16進数で表す（`src/core/ir/fingerprint.ts:74-94`）。
+
+| 項目 | 正準 JSON のプリイメージ |
+| --- | --- |
+| `structure` | `{ role, name, parentRole, siblingBeforeRole, siblingAfterRole }` |
+| `parentName` | `{ slot: "parent", name }` |
+| `siblingBeforeName` | `{ slot: "siblingBefore", name }` |
+| `siblingAfterName` | `{ slot: "siblingAfter", name }` |
+
+`structure` の `name` は対象の正規化済みの名前である。`role`、`parentRole`、`siblingBeforeRole`、`siblingAfterRole` はロールを厳密に保持する。兄弟が存在しなければそのロールは `null` になる。
+
+各スロットのプリイメージの `name` は、その隣接要素の正規化済みの名前である。兄弟が存在しなければプリイメージを作らず、名前のハッシュを `null` とする。
+
+最上位の対象の `parentName` は、合成ルートの空の名前をハッシュするため、値は変わらない。
+
+生成時は、記述子のすべてのロールと名前を秘匿値の汚染について検査してから、指紋と成分を作る。汚染があれば両方とも作らない。対にならないサロゲートがある場合も両方とも作らない。
+
+照合と操作直前の再確認は既存の検査を維持し、秘匿値の汚染による拒否を追加しない（`src/core/ir/fingerprint.ts:343-448`）。
+
+エントリに `components` や `ignoredNames` がある場合も、完全な指紋で照合しなければならない（MUST）。現在の実装は `ignoredNames` を書き込まない。
 
 ## ダイジェスト {#digest}
 
@@ -4152,6 +4212,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
+| グラウンディング v4 → v5 は、要素エントリに省略可能な `components` と `ignoredNames` を追加する。照合には完全な指紋を用い、ambercast は `ignoredNames` を書き込まない。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4は読み取れるため、再生成は不要である。文書の新しい書き込みはv5になり、変更のない実行はファイルを変更しない。v5スキーマはv5だけを受け入れ、v4スキーマは凍結版として残る。旧版の ambercast はv5を読み取れない。旧版へ戻す場合は `ambercast run --resolve --update-cache` でグラウンディングを再生成する。 |
 | report 3.11 → 3.12 は任意の `replayReadiness` を追加する。 | `repo:src/report/schema.ts:58` | この項目がない旧版のレポートも読める。計画 5 とグラウンディング 4 は変わらず、再生成は不要である。 |
 | ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
@@ -4747,11 +4808,12 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/agents/machine-readable-res
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | 利用可能 |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | 利用可能 |
 | [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | 利用可能 |
+| [`schemas/grounding.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json) | 利用可能 |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | 利用可能 |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | 利用可能 |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | 利用可能 |
 
-`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画（plan）v5、グラウンディングv4、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
+`plan.v2`、`plan.v3`、`plan.v4`、`grounding.v2`、`grounding.v3`、`grounding.v4`のスキーマは、リポジトリにコミットした固定の履歴スナップショットで、サイトへそのまま複製される。設定、計画（plan）v5、グラウンディングv5、レポートのスキーマと、`capabilities.json`、`manifest/cli.json`は、npmパッケージに入るビルドと同じバイト列をサイトへ複製する。
 
 関連リンク: [AIエージェントからのambercastの利用](/ambercast/ja/agents/overview/)、[JSON スキーマ](/ambercast/ja/reference/json-schemas/)、[ステータスとロードマップ](/ambercast/ja/explanation/status-and-roadmap/)
 

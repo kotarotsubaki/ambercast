@@ -23,6 +23,29 @@ description: "本章定义定位缓存为元素步骤保存的元素指纹、指
 
 后代节点和不相邻的兄弟节点不得 (MUST NOT) 进入原像 (`src/core/ir/fingerprint.ts:46-50`)。
 
+## 组成部分 {#components}
+
+可选的 `components` 记录使用 `a11y-components-v1`，与完整指纹来自同一个规范化描述符。各哈希按[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form) 生成规范 UTF-8 JSON，再计算 SHA-256 并编码为小写十六进制 (`src/core/ir/fingerprint.ts:74-94`)。
+
+| 字段 | 规范 JSON 原像 |
+| --- | --- |
+| `structure` | `{ role, name, parentRole, siblingBeforeRole, siblingAfterRole }` |
+| `parentName` | `{ slot: "parent", name }` |
+| `siblingBeforeName` | `{ slot: "siblingBefore", name }` |
+| `siblingAfterName` | `{ slot: "siblingAfter", name }` |
+
+在 `structure` 中，`name` 是目标的规范化名称。`role`、`parentRole`、`siblingBeforeRole` 和 `siblingAfterRole` 保留精确角色。不存在兄弟节点时，对应角色为 `null`。
+
+各槽位原像的 `name` 是对应邻近节点的规范化名称。不存在兄弟节点时，不构造原像，而将名称哈希设为 `null`。
+
+对于顶层目标，`parentName` 对合成根节点的空名称计算哈希，因此该哈希保持稳定。
+
+生成时先检查描述符的所有角色和名称是否受到密钥污染，再产生指纹和组成部分。如果存在污染，两者都不产生。存在未配对的代理项时也不产生两者。
+
+匹配验证和操作前复核沿用现有检查，不增加密钥污染拒绝条件 (`src/core/ir/fingerprint.ts:343-448`)。
+
+即使记录项包含 `components` 或 `ignoredNames`，匹配也必须比较完整指纹 (MUST)。当前实现不会写入 `ignoredNames`。
+
 ## 摘要 {#digest}
 
 实现必须 (MUST) 使用[规范 JSON](/ambercast/zh-cn/spec/canonical-json/#digest-form) 序列化描述符，并对其计算 SHA-256 (`src/core/ir/fingerprint.ts:6`) (`src/core/ir/digest.ts:35`)。

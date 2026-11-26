@@ -454,6 +454,12 @@ function fingerprintForSnapshot(snapshot: string): Fingerprint {
   return fingerprint.fingerprint;
 }
 
+function fixtureComponents() {
+  const result = computeAccessibilityFingerprint(parseAriaSnapshot(FIXTURE_ARIA_SNAPSHOT), SUBMIT_BUTTON, []);
+  if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
+  return result.components;
+}
+
 function fixtureFingerprint(): Fingerprint {
   return fingerprintForSnapshot(FIXTURE_ARIA_SNAPSHOT);
 }
@@ -1427,6 +1433,7 @@ describe('ChromiumBrowserSession.resolveGrounded()', () => {
     await withLaunchedSession({ ariaSnapshot: FIXTURE_ARIA_SNAPSHOT }, async (session, launcher) => {
       await expect(session.resolveGrounded(SUBMIT_BUTTON, query)).resolves.toEqual({
         kind: 'hit',
+        components: fixtureComponents(),
         element: expect.objectContaining({
           ref: SUBMIT_BUTTON,
           fingerprint: expectedFingerprint,
@@ -1492,6 +1499,7 @@ describe('ChromiumBrowserSession.resolveGrounded()', () => {
         resolvedSecrets,
       })).resolves.toEqual({
         kind: 'hit',
+        components: fixtureComponents(),
         element: expect.objectContaining({ fingerprint: fixtureFingerprint() }),
       });
 

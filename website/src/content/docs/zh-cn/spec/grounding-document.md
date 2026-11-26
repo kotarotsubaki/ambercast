@@ -9,36 +9,62 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | 必填 | 字面量 `4` | 定位缓存格式版本。 | `src/core/ir/schema.ts:74,1754` |
-| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联执行计划的摘要。 | `src/core/ir/schema.ts:35,1755` |
-| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 定位缓存。 | `src/core/ir/schema.ts:1756` |
+| `schemaVersion` | integer | 必填 | 字面量 `4` | 定位缓存格式版本。| `src/core/ir/schema.ts:74,1754` |
+| `planDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 关联执行计划的摘要。| `src/core/ir/schema.ts:35,1755` |
+| `entries` | record `StepId` → `GroundingEntry` | 必填 | 严格条目分支 | 按 ID 索引的已缓存步骤 定位缓存。| `src/core/ir/schema.ts:1756` |
+
+## 版本兼容性 {#version-compatibility}
+
+读取方先按原有 v4 结构验证 v4 文档，再接受它。v4 元素记录项不得包含 `components` 或 `ignoredNames` (MUST NOT)。
+
+发布的 v5 Schema 仅接受 v5；冻结的 v4 Schema 描述仍可读取的旧格式。
+
+新写入的文档使用 v5。如果运行没有改写任何内容，就必须保持文件及其版本不变 (MUST)。匹配成功的现有记录项保持不变，ambercast 不会为其补充组成部分。
+
+当其他记录项需要写回时，未改动的 v4 记录项可以不带组成部分保留在 v5 文档中。新解析并确认的元素绑定记录绑定时观察到的组成部分。记录项的保持以规范值比较；写入文档可能规范化原有的非规范文本。
 
 ## 条目变体 {#entry-variants}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。 | `src/core/ir/schema.ts:1443` |
-|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。 | `src/core/ir/schema.ts:1444` |
-|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。 | `src/core/ir/schema.ts:1445` |
-|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。 | `src/core/ir/schema.ts:1446` |
-|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。 | `src/core/ir/schema.ts:1447` |
-| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。 | `src/core/ir/schema.ts:1464` |
-|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。 | `src/core/ir/schema.ts:1465` |
+| `ElementGroundingEntryV5` | `kind` | string | 必填 | 字面量 `element` | 元素条目鉴别器。| `src/core/ir/schema.ts:1443` |
+|  | `locator` | `GroundingElementLocator` | 必填 | [值类型](/ambercast/zh-cn/spec/value-types/#shared-types) | 绑定到意图的观测定位器。| `src/core/ir/schema.ts:1444` |
+|  | `fingerprint` | `Fingerprint` | 必填 | [元素指纹](/ambercast/zh-cn/spec/fingerprint/#algorithm) | 无障碍邻域证据。| `src/core/ir/schema.ts:1445` |
+|  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。| `src/core/ir/schema.ts:1446` |
+|  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。| `src/core/ir/schema.ts:1447` |
+|  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 结构与槽位名称哈希。| `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 槽位列表；仍按完整指纹匹配。| `src/core/ir/schema.ts:1519` |
+| `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。| `src/core/ir/schema.ts:1464` |
+|  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。| `src/core/ir/schema.ts:1465` |
 
 `GroundingEntry` 是这两种严格形状按 `kind` 区分的联合。缺少 AI 条目表示尚未记录轨迹；验证为空的 `ai` 条目无效 (`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`)。
+
+## 组成部分 {#components}
+
+`components` 是可选的严格 `FingerprintComponents` 记录。它必须包含 `algorithm`、`structure`、`parentName`、`siblingBeforeName` 和 `siblingAfterName` 这五个字段。`algorithm` 必须为 `a11y-components-v1` (MUST)。
+
+各哈希必须采用小写十六进制 SHA-256。不存在相邻兄弟节点时，其名称哈希必须为 `null` (MUST)，不能省略字段。`parentName` 始终为哈希。
+
+`ignoredNames` 是可选的非空槽位列表。槽位不得重复，并按 `parent`、`siblingBefore`、`siblingAfter` 的固定顺序排列。包含 `ignoredNames` 的记录项必须包含 `components` (MUST)。
+
+列表中每个槽位的名称哈希均不得为 `null` (MUST NOT)。生成方必须省略空列表 (MUST)。
+
+未知的组成部分字段或任何无效记录项都会使整个文档不符合 Schema。Schema 验证只检查结构和组合，不验证完整指纹与组成部分是否来自同一次观察。
+
+当前实现不会写入 `ignoredNames`。即使已保存的记录项包含 `ignoredNames`，匹配仍比较完整指纹。
 
 ## 轨迹记录 {#trace-record}
 
 | 对象 | 字段 | 类型 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
-| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。 | `src/core/ir/schema.ts:1403` |
-|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可回放成功所必需的终结断言。 | `src/core/ir/schema.ts:1404` |
-|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。 | `src/core/ir/schema.ts:1405` |
-| `TraceClick` | `type`, `element` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。 | `src/core/ir/schema.ts:1235` |
-| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。 | `src/core/ir/schema.ts:1251` |
-| `TracePress` | `type`, `element`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。 | `src/core/ir/schema.ts:1267` |
-| `TraceFill` | `type`, `element`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。 | `src/core/ir/schema.ts:1283` |
-| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。 | `src/core/ir/schema.ts:1299` |
+| `TraceRecord` | `events` | `TraceEntry[]` | 必填 | 可为空 | 按时间顺序的操作/断言日志。| `src/core/ir/schema.ts:1403` |
+|  | `verification` | `TraceAssert[]` | 必填 | 最小为 1 | 可回放成功所必需的终结断言。| `src/core/ir/schema.ts:1404` |
+|  | `verificationCoverage` | record `InstructionCriterionId` → integer | 可选 | 非负整数 | 累加式的覆盖到验证索引映射。| `src/core/ir/schema.ts:1405` |
+| `TraceClick` | `type`, `element` | string, `ElementRef` | 必填 | 字面量 `click`；严格 target | 已记录的点击。| `src/core/ir/schema.ts:1235` |
+| `TraceNavigate` | `type`, `url` | string, `InterpolatableText` | 必填 | 字面量 `navigate`；无 secret 标记 | 已记录的导航。| `src/core/ir/schema.ts:1251` |
+| `TracePress` | `type`, `element`, `key` | string, locator, string | 必填 | 字面量 `press`；key 枚举 | 已记录的按键。| `src/core/ir/schema.ts:1267` |
+| `TraceFill` | `type`, `element`, `value` | string, locator, text | 必填 | 字面量 `fill`；无 secret 标记 | 已记录的普通填充。| `src/core/ir/schema.ts:1283` |
+| `TraceFillSecret` | `type`, `element`, `secretRef` | string, locator, ref | 必填 | 字面量 `fill-secret`；完整 ref | 不含字面值的已记录 secret 填充。| `src/core/ir/schema.ts:1299` |
 
 `TraceAction` 是这五种动作记录按 `type` 区分的联合。`key` 的枚举值是 `Enter`、`Tab`、`Escape`、`ArrowDown` 和 `ArrowUp`。`ElementRef`、`InterpolatableText` 和 `SecretRef` 保留[值类型](/ambercast/zh-cn/spec/value-types/#shared-types)中的约束 (`src/core/ir/schema.ts:567-572,1267-1270,1315-1321`)。
 
@@ -48,11 +74,11 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 | 变体 | 字段 | 必填/可选 | 约束 | 描述 | 证据 |
 | --- | --- | --- | --- | --- | --- |
-| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。 | `src/core/ir/schema.ts:1343` |
-| `element-visible` | `type`, `check`, `element` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。 | `src/core/ir/schema.ts:1348` |
-| `text-equals` | `type`, `check`, `element`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。 | `src/core/ir/schema.ts:1353` |
-| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。 | `src/core/ir/schema.ts:1358` |
-| `element-count` | `type`, `check`, `element`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。 | `src/core/ir/schema.ts:1363` |
+| `text-visible` | `type`, `check`, `text` | 全部必填 | 字面量 `assert`、`text-visible`；非 secret 文本 | 可见性观察。| `src/core/ir/schema.ts:1343` |
+| `element-visible` | `type`, `check`, `element` | 全部必填 | 字面量 `assert`、`element-visible`；严格 locator | 元素可见性观察。| `src/core/ir/schema.ts:1348` |
+| `text-equals` | `type`, `check`, `element`, `text` | 全部必填 | 字面量 `assert`、`text-equals`；非 secret 文本 | 精确文本观察。| `src/core/ir/schema.ts:1353` |
+| `url-matches` | `type`, `check`, `pattern` | 全部必填 | 字面量 `assert`、`url-matches`；非 secret 文本 | URL 观察。| `src/core/ir/schema.ts:1358` |
+| `element-count` | `type`, `check`, `element`, `count` | 全部必填 | 字面量 `assert`、`element-count`；整数 ≥ 0 | 计数观察。| `src/core/ir/schema.ts:1363` |
 
 `TraceEntry` 是 `TraceAction` 与 `TraceAssert` 按外层 `type` 区分的联合 (`src/core/ir/schema.ts:1384`)。
 
@@ -62,7 +88,7 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -87,7 +113,7 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 定位缓存的版本 2 和 3 已废弃。在已提交的策略下，`check` 会在模式校验之前报告 `stale-grounding`；在未提交的策略下，则得到 `fresh-without-grounding`。没有 `--resolve` 时，若执行计划摘要匹配且有元素步骤需要定位缓存，`run` 会报告带 `recoverable-miss` 的 `GROUNDING_UNRESOLVED`；摘要不同则得到 `missing`。
 
-`run --resolve` 从空缓存开始，并可以在现有写回条件下持久化 v4。对于未变化的新鲜执行计划，`generate` 会用空的 v4 定位缓存替换已废弃的缓存。在用 `ambercast run --resolve --update-cache` 重新生成缓存之前，`heal` 会报告 `FS_IO_ERROR`。版本 1 和未知版本在 `check` 中仍然无效，在 `run` 中仍然是缓存未命中。
+`run --resolve` 从空缓存开始，并可以在现有写回条件下持久化 v5。对于未变化的新鲜执行计划，`generate` 会用空的 v5 定位缓存替换已废弃的缓存。在用 `ambercast run --resolve --update-cache` 重新生成缓存之前，`heal` 会报告 `FS_IO_ERROR`。版本 1 和未知版本在 `check` 中仍然无效，在 `run` 中仍然是缓存未命中。
 
 ## 设计理由 {#rationale}
 

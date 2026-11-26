@@ -56,7 +56,7 @@ async function writeFixture(project: string, baseUrl: string): Promise<string> {
       }],
     }],
   });
-  const grounding = GroundingDocument.parse({ schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} });
+  const grounding = GroundingDocument.parse({ schemaVersion: 5, planDigest: computePlanDigest(plan), entries: {} });
   const groundingPath = join(tests, 'agentic-delayed.ambercast.grounding.json');
   await Promise.all([
     writeFile(join(project, 'ambercast.config.json'), JSON.stringify({

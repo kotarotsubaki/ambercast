@@ -15,7 +15,7 @@
   ],
   "schemaVersions": {
     "plan": 5,
-    "grounding": 4,
+    "grounding": 5,
     "report": "3.12"
   },
   "fingerprintAlgorithm": "a11y-neighborhood-v2",

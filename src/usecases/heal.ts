@@ -14,7 +14,7 @@ import { normalizeTestMd, type NormalizedTestMd } from '#core/ir/normalize.js';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { dropNavigateConfirms } from '#core/ir/confirms-validation.js';
 import { groundingRecoveryModeForStep } from '#core/ir/grounding-recovery-mode.js';
-import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, GroundingDocument, PlanDocument, type JsonValueT, type SecretName, type StepId } from '#core/ir/schema.js';
+import { GROUNDING_SCHEMA_VERSION, GeneratedPlanResponse, readGroundingDocument, type ReadGroundingDocument, PlanDocument, type JsonValueT, type SecretName, type StepId } from '#core/ir/schema.js';
 import { deriveRequiredCapabilities, UI_CAPABILITIES } from '#core/ir/capabilities.js';
 import { ExecutorUnsupportedError } from '#core/errors/executor-unsupported-error.js';
 import type { LayoutResolver } from '#core/layout/resolve.js';
@@ -714,7 +714,9 @@ async function preflightCase(
 
   let inspection;
   let validResult: ValidatedHealPreflight | undefined;
-  let groundingForPreflight: GroundingDocument | undefined;
+  // Canonical checks preserve the declared version so entry deletion can retain
+  // it, while an unadopted overlay restores the original artifact bytes.
+  let groundingForPreflight: ReadGroundingDocument | undefined;
   try {
     if (!(await deps.storage.exists(groundingFile))) {
       inspection = { kind: 'missing' } as const;
@@ -722,7 +724,7 @@ async function preflightCase(
       const groundingSnapshot = await deps.storage.readTextSnapshot(groundingFile);
       inspection = inspectGroundingArtifactText(groundingSnapshot.text, plan);
       if (inspection.kind === 'valid') {
-        groundingForPreflight = GroundingDocument.parse(JSON.parse(groundingSnapshot.text));
+        groundingForPreflight = readGroundingDocument(JSON.parse(groundingSnapshot.text));
         validResult = {
           normalized,
           digest,
@@ -744,7 +746,7 @@ async function preflightCase(
   }
   if (validResult) {
     // Executor errors must stay outside the grounding inspection error boundary.
-    const requiredCapabilities = deriveRequiredCapabilities(plan, groundingForPreflight!, { resolve: true });
+    const requiredCapabilities = deriveRequiredCapabilities(plan, { ...groundingForPreflight!, schemaVersion: GROUNDING_SCHEMA_VERSION }, { resolve: true });
     for (const name of targetNames) {
       const executor = deps.uiExecutor(deps.config.targets[name]!.executor);
       const targetSurface = definitions[name]!.surface;
@@ -806,7 +808,7 @@ async function verifyGroundingRepairAdoption(
   requiredConfirmedEntryIds: readonly StepId[],
 ): Promise<boolean> {
   if (!requiredPassingStepIds.every((id) => measurement.replay.result.steps.some((step) => step.id === id && step.status === 'passed'))) return false;
-  const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
+  const grounding = readGroundingDocument(JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')));
   return requiredConfirmedEntryIds.every((id) => Object.hasOwn(grounding.entries, id));
 }
 
@@ -854,7 +856,7 @@ async function tryGroundingRepair(
   const mode = groundingRecoveryModeForStep(failingStep);
   if (mode === 'none') return { measurement: baseline, outcome: { kind: 'not-eligible', reason: 'mode-none' } };
 
-  const grounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
+  const grounding = readGroundingDocument(JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')));
   const entry = grounding.entries[failingStep.id];
 
   if (mode === 'ai-retrace') {
@@ -1084,9 +1086,9 @@ async function trySingleStepRepair(
     return propagate(error);
   }
 
-  let previousGrounding: GroundingDocument;
+  let previousGrounding: ReadGroundingDocument;
   try {
-    previousGrounding = JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')) as GroundingDocument;
+    previousGrounding = readGroundingDocument(JSON.parse(await readStorageText(overlay.storage, groundingFile, 'The grounding artifact could not be read.')));
     const entries = Object.fromEntries(Object.entries(previousGrounding.entries).filter(([id]) => id !== step.id));
     await writeStorageText(overlay.storage, planFile, toCanonicalArtifactText(candidate as JsonValueT), 'The repaired plan could not be written.');
     await writeStorageText(overlay.storage, groundingFile, toCanonicalArtifactText({

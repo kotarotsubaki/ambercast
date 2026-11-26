@@ -5,7 +5,7 @@ description: "本规范描述了 ambercast 0.10.0 接受的工件。"
 
 ## 状态 {#status}
 
-本规范描述了 ambercast 0.10.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 4 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
+本规范描述了 ambercast 0.10.0 接受的工件。该实现接受执行计划模式版本 5 和定位缓存模式版本 5，且仍可读取 v4 定位缓存 (`src/core/ir/schema.ts:62`) (`src/core/ir/schema.ts:74`)。
 
 ## 规范性用语 {#normative-language}
 
@@ -36,7 +36,7 @@ description: "本规范描述了 ambercast 0.10.0 接受的工件。"
 | 产物 | 接受的值 | 证据 |
 | --- | --- | --- |
 | 执行计划的 `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
-| 定位缓存的 `schemaVersion` | `4` | `src/core/ir/schema.ts:74` |
+| 定位缓存的 `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | 指纹算法 | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
 | Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
 

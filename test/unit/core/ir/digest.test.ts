@@ -110,7 +110,7 @@ function createPlan({
 
 function createGrounding(planDigest: string): GroundingDocument {
   return GroundingDocument.parse({
-    schemaVersion: 4,
+    schemaVersion: 5,
     planDigest,
     entries: {},
   });

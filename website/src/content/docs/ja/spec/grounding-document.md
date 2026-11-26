@@ -9,23 +9,53 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | グラウンディングフォーマットのバージョン。 | `src/core/ir/schema.ts:74,1754` |
+| `schemaVersion` | integer | required | literal `5` | グラウンディングフォーマットのバージョン。 | `src/core/ir/schema.ts:74,1754` |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | 関連する計画のダイジェスト。 | `src/core/ir/schema.ts:35,1755` |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | ID をキーとするキャッシュされたステップグラウンディング。 | `src/core/ir/schema.ts:1756` |
+
+## バージョン互換性 {#version-compatibility}
+
+読み手は、v4文書を元のv4の形で検証して受け入れる。v4の要素エントリは `components` と `ignoredNames` を含んではならない（MUSTNOT）。
+
+公開するv5スキーマはv5だけを受け入れ、凍結したv4スキーマが読み取り可能な旧形式を表す。
+
+新しく書く文書はv5になる。何も書き換えない実行は、版を含めてファイルを変更してはならない（MUSTNOT）。
+
+一致した既存エントリは変更せず、成分も追加しない。別のエントリの書き戻しが必要な場合、未変更のv4エントリは成分のないままv5文書に残る。新たに解決して確定した要素の束縛は、束縛時に観測した成分を記録する。
+
+エントリの保持は正準値で比較する。文書の書き込みでは、元の非正準な表記を正規化する場合がある。
 
 ## エントリバリアント {#entry-variants}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element エントリの識別子。 | `src/core/ir/schema.ts:1443` |
+| `ElementGroundingEntryV5` | `kind` | string | required | literal `element` | Element エントリの識別子。 | `src/core/ir/schema.ts:1443` |
 |  | `locator` | `GroundingElementLocator` | required | [値型](/ambercast/ja/spec/value-types/#shared-types) | 意図に結び付けられた観測済みロケータ。 | `src/core/ir/schema.ts:1444` |
 |  | `fingerprint` | `Fingerprint` | required | [要素フィンガープリント](/ambercast/ja/spec/fingerprint/#algorithm) | アクセシビリティ近傍のエビデンス。 | `src/core/ir/schema.ts:1445` |
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | `src/core/ir/schema.ts:1447` |
+|  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 構造とスロット名のハッシュ。 | `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | スロット一覧。照合は完全な指紋を用いる。 | `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | `src/core/ir/schema.ts:1465` |
 
 `GroundingEntry` は、この 2 つの厳密な形状を `kind` で区別する共用体である。AI エントリがないことは、トレースを記録していないことを意味する。検証が空の `ai` エントリは無効である（`src/core/ir/schema.ts:1402-1406,1463-1466,1480-1483`）。
+
+## 成分 {#components}
+
+`components` は省略可能な厳格な `FingerprintComponents` レコードである。`algorithm`、`structure`、`parentName`、`siblingBeforeName`、`siblingAfterName` の5項目をすべて持つ。`algorithm` は `a11y-components-v1` でなければならない（MUST）。
+
+各ハッシュは小文字の16進数の SHA-256 とする。兄弟が存在しない場合、その名前のハッシュは `null` としなければならない（MUST）。項目の省略は認めない。
+
+`parentName` は常にハッシュである。
+
+`ignoredNames` は省略可能な空でないスロット一覧である。重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。`ignoredNames` を持つエントリは `components` を持たなければならない（MUST）。
+
+列挙したスロットの名前のハッシュは `null` であってはならない（MUSTNOT）。生成側は空の一覧を項目ごと省かなければならない（MUST）。
+
+未知の成分項目や不正なエントリが1件でもあると、文書全体が不適合になる。スキーマ検証の対象は形と組合せであり、指紋と成分が同じ観測から得られたかは検証しない。
+
+現在の実装は `ignoredNames` を書き込まない。保存済みのエントリに `ignoredNames` がある場合も、照合には完全な指紋を用いる。
 
 ## トレースレコード {#trace-record}
 
@@ -62,7 +92,7 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -87,7 +117,7 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 
 グラウンディングのバージョン 2 と 3 は廃止した。`check` は、コミット済みのポリシーではスキーマ検証の前に `stale-grounding` を報告し、未コミットのポリシーでは `fresh-without-grounding` を報告する。`--resolve` なしの `run` は、計画のダイジェストが一致し、要素ステップにグラウンディングが必要な場合、`GROUNDING_UNRESOLVED` を `recoverable-miss` として報告する。ダイジェストが異なる場合は `missing` になる。
 
-`run --resolve` は空のキャッシュから始まり、既存の書き戻しの条件のもとで v4 を保存できる。`generate` は、変更のない新しい計画に対して、廃止したキャッシュを空の v4 グラウンディングに置き換える。`heal` は、`ambercast run --resolve --update-cache` でキャッシュを再生成するまで `FS_IO_ERROR` を報告する。バージョン 1 と未知のバージョンは、`check` では無効のまま、`run` ではキャッシュミスのままである。
+`run --resolve` は空のキャッシュから始まり、既存の書き戻しの条件のもとで v5 を保存できる。`generate` は、変更のない新しい計画に対して、廃止したキャッシュを空の v5 グラウンディングに置き換える。`heal` は、`ambercast run --resolve --update-cache` でキャッシュを再生成するまで `FS_IO_ERROR` を報告する。バージョン 1 と未知のバージョンは、`check` では無効のまま、`run` ではキャッシュミスのままである。
 
 ## 設計根拠 {#rationale}
 

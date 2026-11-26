@@ -235,7 +235,7 @@ describe('replay readiness report compatibility', () => {
   it('TEST-READY-5 publishes report 3.12 while plan and grounding versions stay fixed', () => {
     expect.soft(REPORT_SCHEMA_VERSION).toBe('3.12');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(5);
   });
   it('TEST-READY-5 generates JSON Schema accepting 3.12 reports', () => {
     const writes = new Map<string, string>();
@@ -248,7 +248,7 @@ describe('replay readiness report compatibility', () => {
     const writes = new Map<string, string>();
     writeGeneratedArtifacts({ outDir: '/dist-output', writeFile: (path, content) => { writes.set(path, content); } });
     const capabilities = JSON.parse(writes.get('/dist-output/manifest/capabilities.json')!);
-    expect(capabilities.schemaVersions).toEqual({ plan: 5, grounding: 4, report: '3.12' });
+    expect(capabilities.schemaVersions).toEqual({ plan: 5, grounding: 5, report: '3.12' });
   });
   it.each([
     ['capabilities.json', 'schemaVersions'], ['docs-v4-expectations.json', 'versions'],
@@ -256,7 +256,7 @@ describe('replay readiness report compatibility', () => {
     const fixture = JSON.parse(readFileSync(new URL(`../../fixtures/${file}`, import.meta.url), 'utf8'));
     expect.soft(fixture[key].report).toBe('3.12');
     expect(fixture[key].plan).toBe(file === 'capabilities.json' ? 5 : '5');
-    expect(fixture[key].grounding).toBe(file === 'capabilities.json' ? 4 : '4');
+    expect(fixture[key].grounding).toBe(file === 'capabilities.json' ? 5 : '5');
   });
   it('TEST-READY-5 retains generator-assumption warnings only on healed rows', () => {
     const warnings = [{ kind: 'generator-assumption', message: 'The account already exists.' }];
@@ -381,7 +381,7 @@ describe('TEST-V1 report-only version change', () => {
   it('pins Plan and Grounding schema versions while preserving the producer contract', () => {
     expect(REPORT_SCHEMA_VERSION).toBe('3.12');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
-    expect(GROUNDING_SCHEMA_VERSION).toBe(4);
+    expect(GROUNDING_SCHEMA_VERSION).toBe(5);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
     // Pins the producer-input fingerprints so this test fails if either changes; update only with a deliberate plan-producer change.
     expect(promptTemplateFingerprint()).toBe('90af9b1b05b4b37057cdf8b2c52e24998474bc79c6c402482f7d137248f8e535');

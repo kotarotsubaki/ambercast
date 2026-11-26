@@ -5,7 +5,7 @@ import { IntegrityViolationError } from '#core/errors/integrity-violation-error.
 import { SecretConsentRequiredError } from '#core/errors/secret-consent-required-error.js';
 import { computeIntentDigest } from '#core/ir/digest.js';
 import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
-import { GroundingDocument, type ElementRef, type JsonValueT } from '#core/ir/schema.js';
+import { readGroundingDocument, GroundingDocument, type ElementRef, type JsonValueT } from '#core/ir/schema.js';
 import { run, type RunDeps } from '#usecases/run.js';
 import { heal } from '#usecases/heal.js';
 import { buildRunReport } from '#usecases/run-report.js';
@@ -46,6 +46,11 @@ function fingerprint(ref: ElementRef) {
   if (result.kind !== 'ok') throw new Error('The fixture requires a unique element.');
   return result.fingerprint;
 }
+function components(ref: ElementRef) {
+  const result = computeAccessibilityFingerprint(tree, ref, []);
+  if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
+  return result.components;
+}
 function intent(ref: ElementRef) {
   const startColumn = PROMPT.split('\n')[2]!.indexOf(ref.name) + 1;
   const sourceSpan = { startLine: 3, startColumn, endLine: 3, endColumn: startColumn + ref.name.length };
@@ -59,7 +64,7 @@ const navigate: TestStep = { id: 'navigate', kind: 'action', action: 'navigate',
 const check = (id = 'dashboard', confirms?: string[]): TestStep => ({ id, kind: 'assert', check: 'text-visible', text: 'Dashboard', timeoutMs: 0, ...(confirms === undefined ? {} : { confirms }) });
 function entry(step: TestStep = click(), locator: ElementRef = SUBMIT) {
   if ((step.kind !== 'action' && step.kind !== 'capture') || !('intent' in step)) throw new Error('Expected an element fixture.');
-  return { kind: 'element' as const, locator, fingerprint: fingerprint(locator), provenance: 'quoted-match' as const,
+  return { kind: 'element' as const, locator, fingerprint: fingerprint(locator), components: components(locator), provenance: 'quoted-match' as const,
     intentDigest: computeIntentDigest({ stepKind: step.kind, operation: step.kind === 'capture' ? 'capture' : step.action, intent: step.intent }) };
 }
 async function fixture(steps: readonly TestStep[] = [check(), click()], options: {
@@ -392,7 +397,7 @@ describe('TEST-READY-3 run assessment of valid grounding', () => {
   ];
   it.each(rows)('reports $name independently of the execution frontier', async ({ entries, expected, status }) => {
     const f = await fixture([navigate, click(), fill, capture, aiStep()], { entries: entries() });
-    GroundingDocument.parse(JSON.parse(f.before));
+    readGroundingDocument(JSON.parse(f.before));
     const outcome = await execute(f, f.deps, { ...DEFAULT_OPTIONS, resolve: false });
     expect(outcome.results[0]!.result.status).toBe(status);
     if (status === 'error') expect(outcome.results[0]!.error).toMatchObject({ kind: 'grounding-unresolved' });

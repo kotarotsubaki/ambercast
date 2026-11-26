@@ -55,6 +55,10 @@ import {
   PLAN_SCHEMA_VERSION,
   ElementBindingProposalResponse,
   GroundingDocument,
+  readGroundingDocument,
+  READABLE_OLD_GROUNDING_SCHEMA_VERSIONS,
+  type FingerprintComponents,
+  type FingerprintNameSlot,
   PlanDocument,
   TraceAction,
   TraceAssert,
@@ -260,10 +264,15 @@ function assertionExpectedValue(step: Step): string | undefined {
  * The transient locator uses GroundingElementLocator so an observed unnamed
  * candidate can reach confirmation without widening plan or trace references.
  */
-type BindingState =
+// Bindings retain component evidence from the observation that justified them.
+// A cache hit retains the stored fingerprint and component evidence rather
+// than replacing it with live observations. The full live fingerprint belongs
+// only to same-run re-verification. Matching uses the complete fingerprint; a stored
+// ignoredNames list does not change the match result.
+type BindingState = { readonly components?: FingerprintComponents; readonly ignoredNames?: FingerprintNameSlot[]; readonly storedEntry?: Extract<GroundingEntry, { kind: 'element' }> } & (
   | { readonly stage: 'candidate'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
   | { readonly stage: 'acted'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number }
-  | { readonly stage: 'confirmed'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number };
+  | { readonly stage: 'confirmed'; readonly locator: GroundingElementLocator; readonly fingerprint: Fingerprint; readonly provenance: 'grounding' | 'quoted-match' | 'ai-proposed'; readonly quoteWaitMs?: number; readonly aiProposalMs?: number });
 
 /**
  * Carries a materialized secret fill through the private run dispatcher.
@@ -793,6 +802,9 @@ export function isRetiredPlanVersion(value: unknown): boolean {
  * own persistence paths.
  */
 export function serializePersistableGrounding(grounding: GroundingDocument): string {
+  // Ordinary persistence writes v5, retaining untouched legacy entries
+  // without components. No rewrite means no file access for migration; when
+  // rewriting, entry equality means canonical value equality, not source spans.
   const text = toCanonicalArtifactText(grounding as unknown as JsonValueT);
   if (!GroundingDocument.safeParse(JSON.parse(text)).success) {
     throw new IntegrityViolationError('The grounding cache does not satisfy the grounding schema.');
@@ -869,7 +881,7 @@ export function inspectGroundingCoverageSource(
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { kind: 'cache-miss' };
   const root = raw as Record<string, unknown>;
-  if (root.schemaVersion !== GROUNDING_SCHEMA_VERSION || root.planDigest !== expectedPlanDigest) {
+  if ((root.schemaVersion !== GROUNDING_SCHEMA_VERSION && !(READABLE_OLD_GROUNDING_SCHEMA_VERSIONS as readonly unknown[]).includes(root.schemaVersion)) || root.planDigest !== expectedPlanDigest) {
     return { kind: 'cache-miss' };
   }
   let hasClaim: boolean;
@@ -878,19 +890,19 @@ export function inspectGroundingCoverageSource(
   } catch {
     return { kind: 'integrity-failure', reason: 'coverage-structure-invalid' };
   }
-  const parsed = GroundingDocument.safeParse(raw);
-  if (!parsed.success) {
+  let parsed;
+  try { parsed = readGroundingDocument(raw); } catch {
     return hasClaim
       ? { kind: 'integrity-failure', reason: 'coverage-structure-invalid' }
       : { kind: 'cache-miss' };
   }
-  if (hasClaim && !isGroundingCanonicalForClaim(sourceText, parsed.data)) {
+  if (hasClaim && !isGroundingCanonicalForClaim(sourceText, parsed)) {
     return { kind: 'integrity-failure', reason: 'coverage-canonical-invalid' };
   }
-  const coverageClaimStepIds = Object.entries(parsed.data.entries)
+  const coverageClaimStepIds = Object.entries(parsed.entries)
     .filter(([, entry]) => entry.kind === 'ai' && Object.hasOwn(entry.trace, 'verificationCoverage'))
     .map(([stepId]) => stepId);
-  return { kind: 'strict-grounding', document: parsed.data, coverageClaimStepIds };
+  return { kind: 'strict-grounding', document: { ...parsed, schemaVersion: GROUNDING_SCHEMA_VERSION }, coverageClaimStepIds };
 }
 
 /**
@@ -2968,7 +2980,7 @@ async function groundedTarget(
     await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
     const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint });
     if (verified.kind === 'hit') {
-      context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, provenance: 'grounding' });
+      context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, storedEntry: stored, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }), provenance: 'grounding' });
       context.resolvedVias.set(step.id, 'grounding');
       return verified.element;
     }
@@ -3034,7 +3046,7 @@ async function groundedTarget(
   // An unavailable fingerprint takes precedence because role agreement alone
   // cannot establish that the candidate is safe to use.
   if (fingerprint.kind !== 'ok' || (intent.roleHint !== undefined && locator.role !== intent.roleHint)) throw new GroundingUnresolvedError('The selected element could not be verified locally.', { stepId: step.id, reason: 'proposal-rejected', rejection: fingerprint.kind !== 'ok' ? 'fingerprint-unavailable' : 'role-mismatch', ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
-  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
+  context.bindingStates.set(step.id, { stage: 'candidate', locator, fingerprint: fingerprint.fingerprint, components: fingerprint.components, provenance, quoteWaitMs, ...(aiProposalMs === undefined ? {} : { aiProposalMs }) });
   const verified = await session.resolveGrounded(locator, { mode: 'verify', fingerprint: fingerprint.fingerprint });
   // The last observation explains why an initially selected candidate is unsafe.
   if (verified.kind === 'miss') throw new GroundingUnresolvedError('The selected element changed before the operation.', { stepId: step.id, reason: 'candidate-changed', verification: verified.reason, ...(proposal === undefined ? {} : buildProposalDiagnostics(proposal)) });
@@ -3585,6 +3597,13 @@ function buildElementEntry(
   state: BindingState,
   provenance: 'quoted-match' | 'ai-proposed',
 ): Extract<GroundingEntry, { kind: 'element' }> {
+  // Fresh bindings contribute the components observed at bind time and
+  // any retained ignoredNames. Hit bindings never rewrite their entries:
+  // doing so would silently refresh stale neighbor evidence. Even a defensive
+  // reconstruction must serialize identically to the stored entry, without
+  // backfilling components into a legacy hit. Confirmation and successful
+  // write-back remain prerequisites for fresh evidence to survive a failure.
+  if (state.storedEntry !== undefined) return state.storedEntry;
   const actionStep = context.actionSteps.get(stepId);
   if (actionStep === undefined || (actionStep.kind === 'action' && actionStep.action === 'navigate')) {
     throw new IntegrityViolationError('A confirming step references no element action.');
@@ -3594,9 +3613,11 @@ function buildElementEntry(
     kind: 'element',
     locator: state.locator,
     fingerprint: state.fingerprint,
+    ...(state.components === undefined ? {} : { components: state.components }),
+    ...(state.ignoredNames === undefined || state.ignoredNames.length === 0 ? {} : { ignoredNames: state.ignoredNames }),
     intentDigest: computeIntentDigest({ stepKind: actionStep.kind, operation, intent: actionStep.intent }),
     provenance,
-  };
+  } as Extract<GroundingEntry, { kind: 'element' }>;
 }
 
 /**

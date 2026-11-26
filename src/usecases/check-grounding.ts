@@ -3,7 +3,7 @@ import {
   isGroundingCanonicalForClaim,
   rawGroundingHasCoverageClaim,
 } from '#core/ir/grounding-coverage-claim.js';
-import { GroundingDocument, isRetiredGroundingSchemaVersion, type PlanDocument } from '#core/ir/schema.js';
+import { readGroundingDocument, isRetiredGroundingSchemaVersion, type PlanDocument } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 
 /*
@@ -59,9 +59,9 @@ export function inspectGroundingArtifactText(text: string, plan: PlanDocument): 
     return { kind: 'stale' };
   }
 
-  const grounding = GroundingDocument.safeParse(parsed);
-  if (!grounding.success) return { kind: 'invalid' };
-  if (!isPlanDigestCurrent(grounding.data, computePlanDigest(plan))) return { kind: 'stale' };
+  let grounding;
+  try { grounding = readGroundingDocument(parsed); } catch { return { kind: 'invalid' }; }
+  if (!isPlanDigestCurrent(grounding, computePlanDigest(plan))) return { kind: 'stale' };
 
   let hasClaim: boolean;
   try {
@@ -69,7 +69,7 @@ export function inspectGroundingArtifactText(text: string, plan: PlanDocument): 
   } catch {
     return { kind: 'invalid' };
   }
-  if (hasClaim && !isGroundingCanonicalForClaim(text, grounding.data)) return { kind: 'invalid' };
+  if (hasClaim && !isGroundingCanonicalForClaim(text, grounding)) return { kind: 'invalid' };
   return { kind: 'valid' };
 }
 

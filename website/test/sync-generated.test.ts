@@ -16,13 +16,14 @@ afterEach(() => {
 const requiredSources = {
   'dist/schema/config.schema.json': '{"schema":"config","unicode":"雪"}\n',
   'dist/schema/plan.schema.json': '{"schema":"plan","current":"v5"}\n',
-  'dist/schema/grounding.schema.json': '{"schema":"grounding","current":"v4"}\n',
+  'dist/schema/grounding.schema.json': '{"schema":"grounding","current":"v5"}\n',
   'dist/schema/report.schema.json': '{"schema":"report"}\n',
   'dist/manifest/capabilities.json': '{"commands":["generate"]}\n',
   'dist/manifest/cli.json': '{"version":"0.3.1"}\n',
 };
 
 const frozenSchemaSource = {
+  'website/src/schemas-frozen/grounding.v4.schema.json': '{"schema":"grounding","frozen":"v4"}\n',
   'website/src/schemas-frozen/plan.v2.schema.json': '{"schema":"plan","frozen":"v2"}\n',
   'website/src/schemas-frozen/plan.v3.schema.json': '{"schema":"plan","frozen":"v3"}\n',
   'website/src/schemas-frozen/plan.v4.schema.json': '{"schema":"plan","frozen":"v4"}\n',
@@ -31,9 +32,10 @@ const frozenSchemaSource = {
 };
 
 const publications: ReadonlyArray<readonly [string, string]> = [
+  ['website/src/schemas-frozen/grounding.v4.schema.json', 'website/public/schemas/grounding.v4.schema.json'],
   ['dist/schema/config.schema.json', 'website/public/schemas/config.schema.json'],
   ['dist/schema/plan.schema.json', 'website/public/schemas/plan.v5.schema.json'],
-  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v4.schema.json'],
+  ['dist/schema/grounding.schema.json', 'website/public/schemas/grounding.v5.schema.json'],
   ['dist/schema/report.schema.json', 'website/public/schemas/report.v3.schema.json'],
   ['dist/manifest/capabilities.json', 'website/public/capabilities.json'],
   ['dist/manifest/cli.json', 'website/public/manifest/cli.json'],

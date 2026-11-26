@@ -3017,7 +3017,7 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
-Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that run saw changing no longer stop this element.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
 This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 
@@ -4434,7 +4434,7 @@ Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading struct
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
-Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that run saw changing no longer stop this element.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
 This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
 This applies to targets with or without an accessible name.
 

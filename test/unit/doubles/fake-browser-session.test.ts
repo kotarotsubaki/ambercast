@@ -148,6 +148,15 @@ describe('createFakeBrowserSession', () => {
     ]);
   });
 
+  it('attaches no components when the entry fingerprint differs from the live neighborhood', async () => {
+    const session = createFakeBrowserSession(entries(true, FINGERPRINT));
+    const result = await session.resolveGrounded(REF, { mode: 'verify', fingerprint: FINGERPRINT });
+
+    expect(result.kind).toBe('hit');
+    expect(result).not.toHaveProperty('components');
+    expect(result.kind === 'hit' ? result.element : undefined).not.toHaveProperty('components');
+  });
+
   it.each([
     ['verify', 'ambiguous-match', { mode: 'verify', fingerprint: FINGERPRINT }],
     ['verify', 'snapshot-invalid', { mode: 'verify', fingerprint: FINGERPRINT }],

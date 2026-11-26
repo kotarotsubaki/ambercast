@@ -615,7 +615,8 @@ export function createFakeBrowserSession(
       const result = resolveBinding(state, ref, query);
       if (result.kind !== 'hit') return result;
       const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, ref, query.mode === 'compute' ? query.resolvedSecrets : []);
-      if (observed.kind === 'ok') {
+      // Components describe the live neighborhood, so they accompany a hit only when the stored fingerprint equals it, as with the real adapter.
+      if (observed.kind === 'ok' && observed.fingerprint.hash === result.element.fingerprint.hash) {
         Object.assign(result.element, { components: { ...observed.components } });
         return { ...result, components: observed.components };
       }

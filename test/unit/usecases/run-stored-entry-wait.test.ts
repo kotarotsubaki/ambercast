@@ -399,8 +399,10 @@ describe('stored entry verification deadlines', () => {
     { name: 'retained exclusions', results: [neighborMiss, neighborMiss, neighborMiss, neighborMiss], ignored: ['parent'] as FingerprintNameSlot[], expected: ['parent', 'siblingBefore'] },
   ])('TEST-WAIT-10 learns exclusions from $name only', async ({ results, ignored, expected }) => {
     const f = await fixture({ timeout: 300, change: { siblingBefore: 'Beta' }, ...(ignored ? { ignored } : {}) });
-    f.script(results);
-    const scripted = f.resolveGrounded.getMockImplementation()!;
+    // The scripted misses are served by index here rather than through the once-queue,
+    // because getMockImplementation may report a queued once-implementation and a queued
+    // result would bypass the entry assertions below.
+    const passThrough = f.resolveGrounded.getMockImplementation()!;
     const queries: { query: unknown; copy: unknown }[] = [];
     let replacing = false;
     f.snapshots.mockImplementation(async () => {
@@ -422,7 +424,7 @@ describe('stored entry verification deadlines', () => {
         expect(f.recordingStorage.writes.filter(write => write.path === f.groundingPath)).toEqual([]);
         expect(f.snapshots).not.toHaveBeenCalled();
       }
-      return scripted(ref, query);
+      return replacing ? passThrough(ref, query) : results[queries.length - 1]!;
     });
     const result = await f.execute(true);
     expect(result.result.status).toBe('passed');

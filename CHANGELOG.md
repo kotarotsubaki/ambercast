@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.11.0](https://github.com/kotarotsubaki/ambercast/compare/v0.10.0...v0.11.0) (2026-11-27)
+
+
+### Features
+
+* **report:** report whether a case is ready for zero-AI replay in run and check ([#714](https://github.com/kotarotsubaki/ambercast/issues/714)) ([2eabcfe](https://github.com/kotarotsubaki/ambercast/commit/2eabcfeaa4bfa373e94a3c5fd552461fe6e0d15a))
+* **report:** tell users when neighbor text stops being compared and why a replay stopped ([#725](https://github.com/kotarotsubaki/ambercast/issues/725)) ([84600f4](https://github.com/kotarotsubaki/ambercast/commit/84600f4b8664cae10d82c1613aedab1df3a8eacf))
+* **run:** record why first-binding resolution failed in GROUNDING_UNRESOLVED details ([#716](https://github.com/kotarotsubaki/ambercast/issues/716)) ([c508ac3](https://github.com/kotarotsubaki/ambercast/commit/c508ac33f75f5f29bae5b46914727adf8abd364f))
+* **run:** warn when an assertion already held before the preceding actions ran ([#715](https://github.com/kotarotsubaki/ambercast/issues/715)) ([e5c6bb2](https://github.com/kotarotsubaki/ambercast/commit/e5c6bb22214a62a5d557f36eed4fcacb07761b31))
+
+
+### Bug Fixes
+
+* **grounding:** split the element fingerprint into components and add grounding v5 ([#723](https://github.com/kotarotsubaki/ambercast/issues/723)) ([5c61302](https://github.com/kotarotsubaki/ambercast/commit/5c613021fb5bda821a4d66c92d2f24023535c777))
+* **grounding:** stop comparing neighbor text that was observed to change between runs ([#724](https://github.com/kotarotsubaki/ambercast/issues/724)) ([e5e0738](https://github.com/kotarotsubaki/ambercast/commit/e5e073839282195382c4b0ddfea0eb2d2e022920))
+* **run:** save every acted element binding when a case completes ([#713](https://github.com/kotarotsubaki/ambercast/issues/713)) ([f4df785](https://github.com/kotarotsubaki/ambercast/commit/f4df7856044678a8403f9fc9c9fdf7f07fa9eed9))
+
 ## [0.10.0](https://github.com/kotarotsubaki/ambercast/compare/v0.9.0...v0.10.0) (2026-11-07)
 
 

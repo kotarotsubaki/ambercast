@@ -176,6 +176,9 @@ describe('neighbor-name replay against real Chromium', () => {
       f.app.setPage('/neighbor', pageHtml('Discard memo'));
       const stopped = await f.execute(false);
       expect(stopped.outcome.results[0]?.result.status).not.toBe('passed');
+      // A rejected live check must not reach the field: neither the step nor the page's input handler may report a fill.
+      expect(stopped.outcome.results[0]?.result.steps.find(step => step.id === 'fill-memo')?.status).not.toBe('passed');
+      expect(f.actions).not.toContain('fill');
       expect(stopped.report.errors[0]).toMatchObject({ code: 'GROUNDING_UNRESOLVED', details: {
         verification: 'fingerprint-mismatch', difference: 'neighbor-names', changedNames: ['siblingAfter'],
       } });

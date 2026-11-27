@@ -9,7 +9,7 @@
  */
 
 import { computeIntentDigest } from '#core/ir/digest.js';
-import { GroundingDocument, type PlanDocument, type Step } from '#core/ir/schema.js';
+import { readGroundingDocument, type ReadGroundingDocument, type PlanDocument, type Step } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 import { inspectGroundingArtifactText } from './check-grounding.js';
 import { isLegacyShapedTrace } from './instruction-coverage-policy.js';
@@ -96,11 +96,9 @@ export function assessReplayReadiness(plan: PlanDocument, source: GroundingSourc
   if (inspection.kind === 'stale') return { status: 'not-ready', reason: 'grounding-stale' };
   if (inspection.kind === 'missing') return { status: 'not-ready', reason: 'grounding-missing' };
 
-  let grounding: GroundingDocument;
+  let grounding: ReadGroundingDocument;
   try {
-    const parsed = GroundingDocument.safeParse(JSON.parse(source.text));
-    if (!parsed.success) return { status: 'not-ready', reason: 'grounding-invalid' };
-    grounding = parsed.data;
+    grounding = readGroundingDocument(JSON.parse(source.text));
   } catch {
     return { status: 'not-ready', reason: 'grounding-invalid' };
   }

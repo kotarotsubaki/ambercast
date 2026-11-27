@@ -2166,10 +2166,10 @@ Four schemas describe the current contracts on `main`. A schema version newer th
 | --- | --- | --- | --- | --- | --- | --- |
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | unversioned; config has no `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | A present configuration document. | available |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A completed current `PlanDocument`, including targets and steps. | available |
-| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
+| grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json` | 5 | `ambercast grounding schema v5` | `Validates the committed grounding cache associated with one plan digest.` | A `GroundingDocument` with `planDigest` and step-keyed entries. | available |
 | report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | A structured report envelope and its command-specific results. | available |
 
-Five frozen snapshots remain for consumers of retired contracts. The site publishes them from committed files, and the npm package does not export them.
+Six frozen snapshots preserve older contracts; Grounding v4 remains readable. The site publishes them from committed files, and the npm package does not export them.
 
 | artifact | public path and `$id` | version | `title` | `description` | scope | state |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2178,6 +2178,7 @@ Five frozen snapshots remain for consumers of retired contracts. The site publis
 | plan (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v4.schema.json` | 4 | `ambercast plan schema v4` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | A frozen Plan v4 snapshot retained for consumers of the retired contract. | available |
 | grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json` | 2 | `ambercast grounding schema v2` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v2 snapshot retained for consumers of the retired contract. | available |
 | grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json` | 3 | `ambercast grounding schema v3` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v3 snapshot retained for consumers of the retired contract. | available |
+| grounding (historical snapshot) | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json` | 4 | `ambercast grounding schema v4` | `Validates the committed grounding cache associated with one plan digest.` | A frozen Grounding v4 snapshot retained for consumers of the readable v4 contract. | available |
 
 Each `$id` equals its public-path URL. The site serves the four current schemas as byte-identical copies of the files in `dist/schema/`. The npm package exports those four as `ambercast/schema/<name>.json`.
 
@@ -2188,7 +2189,7 @@ The site configuration sets `site` to the `https://kotarotsubaki.github.io` host
 | generated file | validates | generated from | npm export |
 | --- | --- | --- | --- |
 | `plan.schema.json` | A completed current `PlanDocument` with Plan `schemaVersion` 5, provenance source, targets, and steps. | Zod `PlanDocument` converted as JSON Schema 2020-12. | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
-| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 4, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
+| `grounding.schema.json` | A `GroundingDocument` with Grounding `schemaVersion` 5, `planDigest`, and step-keyed entries. | Zod `GroundingDocument` converted as JSON Schema 2020-12. | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | A present configuration document whose `$schema` is required and whose declared settings are otherwise optional. | Zod `RawConfig` converted as JSON Schema 2020-12. | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
 | `report.schema.json` | A structured report envelope and its command-specific results with Report `schemaVersion` 3.12. | Zod `ReportEnvelope` converted as JSON Schema 2020-12. | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
@@ -3263,7 +3264,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/overview/
 
 ## Status {#status}
 
-This specification describes the artifacts accepted by ambercast 0.10.0. The implementation accepts Plan schema version 5 and Grounding schema version 4. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74)
+This specification describes the artifacts accepted by ambercast 0.10.0. The implementation accepts Plan schema version 5 and Grounding schema version 5; Grounding v4 remains readable. [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L62) [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74)
 
 ## Normative language {#normative-language}
 
@@ -3294,7 +3295,7 @@ A Plan records its `inputsDigest`, and `planDigest` is computed from the Plan. A
 | Artifact | Accepted value | Evidence |
 | --- | --- | --- |
 | Plan `schemaVersion` | `5` | [src/core/ir/schema.ts:62](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L62) |
-| Grounding `schemaVersion` | `4` | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74) |
+| Grounding `schemaVersion` | `5`, `4` | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74) |
 | Fingerprint algorithm | `a11y-neighborhood-v2` | [src/core/ir/schema.ts:303](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L303) |
 | Report `schemaVersion` | `3.12` | [src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/report/schema.ts#L58) |
 
@@ -3658,6 +3659,12 @@ All other chapters MUST use these definitions rather than restating their shapes
 | `QuotedElementIntent` (extends `ElementIntent`) | `quote` | `Quote` | required | strict nested object | Required literal UI-text quote. | [src/core/ir/schema.ts:424](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L424) |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | [src/core/ir/schema.ts:320](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L320) |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:321](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L321) |
+| `FingerprintComponents` | `algorithm` | string | required | literal `a11y-components-v1` | Component algorithm. | [src/core/ir/schema.ts:1462-1481](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1462-L1481) |
+|  | `structure` | `HexSha256` | required | lowercase SHA-256 | Target name and neighborhood roles. | [src/core/ir/schema.ts:1462-1481](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1462-L1481) |
+|  | `parentName` | `HexSha256` | required | lowercase SHA-256 | Direct parent name. | [src/core/ir/schema.ts:1462-1481](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1462-L1481) |
+|  | `siblingBeforeName` | `HexSha256` or null | required | null iff sibling absent | Preceding sibling name; null when absent. | [src/core/ir/schema.ts:1462-1481](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1462-L1481) |
+|  | `siblingAfterName` | `HexSha256` or null | required | null iff sibling absent | Following sibling name; null when absent. | [src/core/ir/schema.ts:1462-1481](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1462-L1481) |
+| `FingerprintNameSlot` | — | string | value | enum `parent`, `siblingBefore`, `siblingAfter` | Ordered neighbor-name slot vocabulary. | [src/core/ir/schema.ts:1457](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1457) |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | [src/core/ir/schema.ts:372](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L372) |
 |  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | [src/core/ir/schema.ts:373](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L373) |
 |  | `endLine` | integer | required | positive | One-based UTF-16 end line. | [src/core/ir/schema.ts:374](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L374) |
@@ -3722,23 +3729,45 @@ This chapter defines `GroundingDocument`, the committed grounding cache bound to
 
 | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- |
-| `schemaVersion` | integer | required | literal `4` | Grounding format version. | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74), [src/core/ir/schema.ts:1754](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1754) |
+| `schemaVersion` | integer | required | literal `5` | Grounding format version. | [src/core/ir/schema.ts:74](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L74), [src/core/ir/schema.ts:1754](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1754) |
 | `planDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the associated plan. | [src/core/ir/schema.ts:35](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L35), [src/core/ir/schema.ts:1755](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1755) |
 | `entries` | record `StepId` → `GroundingEntry` | required | strict entry branches | Cached step grounding keyed by ID. | [src/core/ir/schema.ts:1756](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1756) |
+
+## Version compatibility {#version-compatibility}
+
+Consumers accept v4 documents after validating their original v4 shape. A v4 element entry MUST NOT contain `components` or `ignoredNames`. The published v5 schema accepts only v5; the frozen v4 schema describes the readable older format.
+
+Newly written documents use v5. A run that rewrites nothing MUST leave the file untouched, including its version. Existing entries that match remain unchanged; ambercast does not add components to them.
+
+When another entry requires write-back, unchanged v4 entries can remain without components in the v5 document. A newly resolved, confirmed element binding records the components observed at binding time. Entry preservation compares canonical values; a document write can normalize previously noncanonical text.
 
 ## Entry variants {#entry-variants}
 
 | object | field | type | required/optional | constraint | description | evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ElementGroundingEntryV4` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1443](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1443) |
+| `ElementGroundingEntryV5` | `kind` | string | required | literal `element` | Element-entry discriminator. | [src/core/ir/schema.ts:1443](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1443) |
 |  | `locator` | `GroundingElementLocator` | required | [Value types](/ambercast/spec/value-types/#shared-types) | Observed locator bound to the intent. | [src/core/ir/schema.ts:1444](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1444) |
 |  | `fingerprint` | `Fingerprint` | required | [Element fingerprint](/ambercast/spec/fingerprint/#algorithm) | Accessibility-neighborhood evidence. | [src/core/ir/schema.ts:1445](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1445) |
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | Digest of the committed intent this locator was bound against. | [src/core/ir/schema.ts:1446](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1446) |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | Which first-binding stage produced this locator. | [src/core/ir/schema.ts:1447](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1447) |
+|  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | Structure and slot-name hashes. | [src/core/ir/schema.ts:1519](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1519) |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | Slot list; complete fingerprint matching remains in effect. | [src/core/ir/schema.ts:1519](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1519) |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI-entry discriminator. | [src/core/ir/schema.ts:1464](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1464) |
 |  | `trace` | `TraceRecord` | required | strict trace | Replayable successful trace. | [src/core/ir/schema.ts:1465](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1465) |
 
 `GroundingEntry` is the `kind` union of these two exact strict shapes. A missing AI entry means no trace has been recorded; an `ai` entry with empty verification is invalid. [src/core/ir/schema.ts:1402-1406](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1402-L1406), [src/core/ir/schema.ts:1463-1466](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1463-L1466), [src/core/ir/schema.ts:1480-1483](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/schema.ts#L1480-L1483)
+
+## Components {#components}
+
+`components` is an optional strict `FingerprintComponents` record. It contains all five fields: `algorithm`, `structure`, `parentName`, `siblingBeforeName`, and `siblingAfterName`. `algorithm` MUST be `a11y-components-v1`.
+
+Each hash MUST be lowercase SHA-256 hexadecimal. An absent sibling MUST have a `null` name hash; the field MUST NOT be omitted. `parentName` is always a hash.
+
+`ignoredNames` is an optional non-empty list of slots in the fixed order `parent`, `siblingBefore`, `siblingAfter`, without duplicates. An entry with `ignoredNames` MUST have `components`. Every listed slot MUST have a non-null name hash.
+
+Producers MUST omit an empty list. Unknown component fields or one invalid entry invalidate the whole document. Schema validation checks shapes and combinations, not whether the full fingerprint and components describe the same observation.
+
+The current implementation never writes `ignoredNames`. Matching still compares the complete fingerprint, including when a stored entry contains `ignoredNames`.
 
 ## Trace record {#trace-record}
 
@@ -3775,7 +3804,7 @@ This illustrative `planDigest` refers to the complete Plan example in [Plan docu
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
   "entries": {}
 }
@@ -3800,7 +3829,7 @@ For every `TraceFillSecret`, `secretRef` MUST belong to the containing Plan AI s
 
 Grounding versions 2 and 3 are retired. `check` reports `stale-grounding` before schema validation under committed policy; uncommitted policy yields `fresh-without-grounding`. Without `--resolve`, `run` reports `GROUNDING_UNRESOLVED` with `recoverable-miss` when the plan digest matches and an element step needs grounding; a differing digest yields `missing`.
 
-`run --resolve` starts with an empty cache and can persist v4 under the existing write-back conditions. `generate` on an unchanged fresh plan replaces a retired cache with empty v4 grounding. `heal` reports `FS_IO_ERROR` until the cache is regenerated with `ambercast run --resolve --update-cache`. Versions 1 and unknown versions remain invalid in `check` and cache misses in `run`.
+`run --resolve` starts with an empty cache and can persist v5 under the existing write-back conditions. `generate` on an unchanged fresh plan replaces a retired cache with empty v5 grounding. `heal` reports `FS_IO_ERROR` until the cache is regenerated with `ambercast run --resolve --update-cache`. Versions 1 and unknown versions remain invalid in `check` and cache misses in `run`.
 
 ## Rationale {#rationale}
 
@@ -3832,6 +3861,29 @@ The algorithm [src/core/ir/fingerprint.ts:241](https://github.com/kotarotsubaki/
 7. Store lowercase hexadecimal output with the v2 tag.
 
 Descendants and non-adjacent siblings MUST NOT enter the preimage. [src/core/ir/fingerprint.ts:46-50](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/fingerprint.ts#L46-L50)
+
+## Components {#components}
+
+The optional `components` record uses `a11y-components-v1` and the same normalized descriptor as the complete fingerprint. Each hash is SHA-256 of canonical UTF-8 JSON using [Canonical JSON](/ambercast/spec/canonical-json/#digest-form), encoded as lowercase hexadecimal. [src/core/ir/fingerprint.ts:74-94](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/fingerprint.ts#L74-L94)
+
+| Field | Canonical JSON preimage |
+| --- | --- |
+| `structure` | `{ role, name, parentRole, siblingBeforeRole, siblingAfterRole }` |
+| `parentName` | `{ slot: "parent", name }` |
+| `siblingBeforeName` | `{ slot: "siblingBefore", name }` |
+| `siblingAfterName` | `{ slot: "siblingAfter", name }` |
+
+In `structure`, `name` is the target's normalized name. The fields `role`, `parentRole`, `siblingBeforeRole`, and `siblingAfterRole` retain exact roles. An absent sibling's role is `null`.
+
+In each slot preimage, `name` is that neighbor's normalized name. An absent sibling has a `null` name hash instead of a preimage. 
+
+For a top-level target, `parentName` hashes the synthetic root's empty name, so the hash stays stable.
+
+Generation checks every descriptor role and name for secret contamination before producing either the fingerprint or components. Contamination prevents both outputs. An unpaired surrogate also prevents both outputs.
+
+Verification and pre-action re-verification retain their existing checks; they add no secret-contamination rejection. [src/core/ir/fingerprint.ts:343-448](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/core/ir/fingerprint.ts#L343-L448)
+
+Matching MUST compare the complete fingerprint even when an entry contains `components` or `ignoredNames`. The current implementation never writes `ignoredNames`.
 
 ## Digest {#digest}
 
@@ -4124,6 +4176,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| Grounding v4 → v5 adds optional `components` and `ignoredNames` to element entries. Matching still compares the complete fingerprint; ambercast does not write `ignoredNames`. | `repo:src/core/ir/schema.ts`, `repo:src/core/ir/fingerprint.ts` | No regeneration is required: v4 remains readable. New document writes use v5; a run without changes leaves the file untouched. The v5 schema accepts only v5; the v4 schema remains frozen. Older ambercast versions cannot read v5; on rollback, regenerate grounding with `ambercast run --resolve --update-cache`. |
 | report 3.11 → 3.12 adds optional `replayReadiness`. | `[src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/report/schema.ts#L58)` | Older reports remain readable without this field. Plan 5 and Grounding 4 are unchanged; no regeneration is required. |
 | Grounding entries for click, press, fill, fill-secret, and capture are also saved when every step in a case passes, subject to write-back permission. The grounding format is unchanged. | `[src/usecases/run.ts:3490-3524](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3490-L3524)`, `[src/usecases/run.ts:4431-4437](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L4431-L4437)` | No migration required. |
 | The provider response adds optional `assumptions`; `ambiguities` means only unresolved target assignment. The producer fingerprint changes, making existing plans stale. | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | Regenerate plans and rebuild grounding using [Re-ground after a producer change](/ambercast/how-to/upgrade/#reground-after-producer-change). |
@@ -4717,11 +4770,12 @@ These are the files you can fetch, and the rule that says which of them to trust
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | available |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | available |
 | [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | available |
+| [`schemas/grounding.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json) | available |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | available |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, and `grounding.v3` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v4, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
+The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, `grounding.v3`, and `grounding.v4` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v5, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
 
 Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)
 

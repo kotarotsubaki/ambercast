@@ -18,6 +18,29 @@ The algorithm [repo:src/core/ir/fingerprint.ts:241] [repo:src/core/ir/fingerprin
 
 Descendants and non-adjacent siblings MUST NOT enter the preimage. [repo:src/core/ir/fingerprint.ts:46-50]
 
+## Components {#components}
+
+The optional `components` record uses `a11y-components-v1` and the same normalized descriptor as the complete fingerprint. Each hash is SHA-256 of canonical UTF-8 JSON using [[spec/canonical-json#digest-form]], encoded as lowercase hexadecimal. [repo:src/core/ir/fingerprint.ts:74-94]
+
+| Field | Canonical JSON preimage |
+| --- | --- |
+| `structure` | `{ role, name, parentRole, siblingBeforeRole, siblingAfterRole }` |
+| `parentName` | `{ slot: "parent", name }` |
+| `siblingBeforeName` | `{ slot: "siblingBefore", name }` |
+| `siblingAfterName` | `{ slot: "siblingAfter", name }` |
+
+In `structure`, `name` is the target's normalized name. The fields `role`, `parentRole`, `siblingBeforeRole`, and `siblingAfterRole` retain exact roles. An absent sibling's role is `null`.
+
+In each slot preimage, `name` is that neighbor's normalized name. An absent sibling has a `null` name hash instead of a preimage. 
+
+For a top-level target, `parentName` hashes the synthetic root's empty name, so the hash stays stable.
+
+Generation checks every descriptor role and name for secret contamination before producing either the fingerprint or components. Contamination prevents both outputs. An unpaired surrogate also prevents both outputs.
+
+Verification and pre-action re-verification retain their existing checks; they add no secret-contamination rejection. [repo:src/core/ir/fingerprint.ts:343-448]
+
+Matching MUST compare the complete fingerprint even when an entry contains `components` or `ignoredNames`. The current implementation never writes `ignoredNames`.
+
 ## Digest {#digest}
 
 Implementations MUST serialize the descriptor with [[spec/canonical-json#digest-form]] and SHA-256 it. [repo:src/core/ir/fingerprint.ts:6] [repo:src/core/ir/digest.ts:35]

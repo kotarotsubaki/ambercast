@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { toCanonicalArtifactText } from '#core/ir/canonical-json.js';
 import { computeIntentDigest, computePlanDigest } from '#core/ir/digest.js';
-import { AiGroundingEntry, GroundingDocument, PlanDocument, Step, type JsonValueT } from '#core/ir/schema.js';
+import { AiGroundingEntry, readGroundingDocument, GroundingDocument, PlanDocument, Step, type JsonValueT } from '#core/ir/schema.js';
 import type { ReadStorageAdapter } from '#ports/storage.js';
 import { assessReplayReadiness, readReplayReadiness, replayEntrySteps, type GroundingSource } from '#usecases/replay-readiness.js';
 import { planCompletionPromotions, run } from '#usecases/run.js';
@@ -55,7 +55,7 @@ describe('TEST-READY-1 artifact assessment', () => {
     ].map(row => { const p = plan([ai]); return { ...row, p, source: text(p, { ai: row.entry }) }; }),
   ];
   it.each(cases)('$name', ({ p, source, expected }) => {
-    if (source.kind === 'text' && 'reason' in expected && expected.reason === 'steps-unresolved') GroundingDocument.parse(JSON.parse(source.text));
+    if (source.kind === 'text' && 'reason' in expected && expected.reason === 'steps-unresolved') readGroundingDocument(JSON.parse(source.text));
     const before = JSON.stringify({ p, source });
     expect(assessReplayReadiness(p, source)).toEqual(expected);
     expect(JSON.stringify({ p, source })).toBe(before);

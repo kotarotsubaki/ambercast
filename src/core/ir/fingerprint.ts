@@ -8,6 +8,7 @@ import {
   FINGERPRINT_ALGORITHM,
   type AccessibilityElementRef,
   type Fingerprint,
+  type FingerprintComponents,
   type JsonValueT,
 } from './schema.js';
 
@@ -49,12 +50,62 @@ type NodeIdentity = {
  * page tree.
  */
 type AccessibilityFingerprintDescriptor = NodeIdentity & {
-  readonly parent: NodeIdentity | null;
+  readonly parent: NodeIdentity;
   readonly siblingBefore: NodeIdentity | null;
   readonly siblingAfter: NodeIdentity | null;
 };
 
 const UNPAIRED_SURROGATE_ERROR_MESSAGE = 'Cannot canonicalize a string with an unpaired surrogate.';
+
+/**
+ * Builds independently comparable hashes from one normalized descriptor.
+ *
+ * @param descriptor - The bounded neighborhood of a unique match.
+ * @returns Deterministic structure and slot-name hashes, or undefined for an
+ * unpaired surrogate anywhere in the descriptor.
+ * @throws Propagates unexpected canonicalization or hashing failures.
+ * @remarks Each preimage uses canonical JSON bytes and SHA-256. Slot tags
+ * distinguish equal names in different positions. The synthetic root is a
+ * real parent contribution; only absent siblings have null name hashes.
+ * Separating these contributions allows a name that varies between runs to
+ * be distinguished from structural drift without changing the full fingerprint.
+ */
+export function buildFingerprintComponents(
+  descriptor: AccessibilityFingerprintDescriptor,
+): FingerprintComponents | undefined {
+  const hash = (value: JsonValueT): string => createHash('sha256')
+    .update(toCanonicalDigestBytes(value)).digest('hex');
+
+  try {
+    return {
+      algorithm: 'a11y-components-v1',
+      structure: hash({
+        role: descriptor.role,
+        name: descriptor.name,
+        parentRole: descriptor.parent.role,
+        siblingBeforeRole: descriptor.siblingBefore?.role ?? null,
+        siblingAfterRole: descriptor.siblingAfter?.role ?? null,
+      }),
+      parentName: hash({ slot: 'parent', name: descriptor.parent.name }),
+      siblingBeforeName: descriptor.siblingBefore === null
+        ? null : hash({ slot: 'siblingBefore', name: descriptor.siblingBefore.name }),
+      siblingAfterName: descriptor.siblingAfter === null
+        ? null : hash({ slot: 'siblingAfter', name: descriptor.siblingAfter.name }),
+    };
+  } catch (error) {
+    if (isUnpairedSurrogateError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/** Successful generation evidence from a single secret-checked descriptor. */
+export type AccessibilityFingerprintOk = {
+  readonly kind: 'ok';
+  readonly fingerprint: Fingerprint;
+  readonly components: FingerprintComponents;
+};
 
 function isUnpairedSurrogateError(error: unknown): error is RangeError {
   return error instanceof RangeError && error.message === UNPAIRED_SURROGATE_ERROR_MESSAGE;
@@ -350,7 +401,7 @@ export function computeAccessibilityFingerprint(
   ref: AccessibilityElementRef,
   resolvedSecretValues: Iterable<ReadonlySet<string>>,
 ):
-  | { readonly kind: 'ok'; readonly fingerprint: Fingerprint }
+  | AccessibilityFingerprintOk
   | { readonly kind: 'no-match' }
   | { readonly kind: 'ambiguous-match' }
   | { readonly kind: 'snapshot-invalid' }
@@ -385,14 +436,16 @@ export function computeAccessibilityFingerprint(
     }
   }
 
-  if (descriptorContainsResolvedSecret(descriptorFor(match), resolvedSecrets)) {
+  const descriptor = descriptorFor(match);
+  if (descriptorContainsResolvedSecret(descriptor, resolvedSecrets)) {
     return { kind: 'secret-contaminated' };
   }
 
   const fingerprint = hashMatch(match);
-  return fingerprint === undefined
+  const components = buildFingerprintComponents(descriptor);
+  return fingerprint === undefined || components === undefined
     ? { kind: 'no-match' }
-    : { kind: 'ok', fingerprint };
+    : { kind: 'ok', fingerprint, components };
 }
 
 /**

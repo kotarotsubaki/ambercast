@@ -25,8 +25,15 @@ import { fileURLToPath } from 'node:url';
  * da60f9f31c913674022fd5c20a772ca2a3fcbd87a6462dbf09b6d9204d2adfc6). The frozen
  * grounding.v3.schema.json snapshot preserves bytes from immediately before Grounding v4
  * (commit 5b99dcc, SHA-256
- * 715f70554f802132aad5771e5dc5aca5e46699b3d7e99bc289f6b69fe2c6bd95). Publishing both alongside
+ * 715f70554f802132aad5771e5dc5aca5e46699b3d7e99bc289f6b69fe2c6bd95). Publishing these alongside
  * the current grounding schema keeps the retired contracts available at stable URLs.
+ * The grounding delivery contract serves current build output at the v5 URL
+ * (`schemas/grounding.v5.schema.json`) and serves the v4 URL
+ * (`schemas/grounding.v4.schema.json`) from a frozen, byte-identical copy checked
+ * in beforehand. The v4 copy is never regenerated from the current schema.
+ * Its bytes come from commit d626e6d0 (SHA-256
+ * 77907d221ecd01f0605f279bde79aeb3e3e4211ebe2b5fb8cf585d23f2344c22).
+ * Both artifacts are verified before publishing to preserve the legacy contract.
  * `SYNC_OPTIONAL=1` permits only an entirely absent root build so local development can
  * deliberately serve 404s instead of obsolete generated artifacts.
  *
@@ -112,7 +119,7 @@ async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
   const publications = [
     ['schema/config.schema.json', 'schemas/config.schema.json'],
     ['schema/plan.schema.json', 'schemas/plan.v5.schema.json'],
-    ['schema/grounding.schema.json', 'schemas/grounding.v4.schema.json'],
+    ['schema/grounding.schema.json', 'schemas/grounding.v5.schema.json'],
     ['schema/report.schema.json', 'schemas/report.v3.schema.json'],
     ['manifest/capabilities.json', 'capabilities.json'],
     ['manifest/cli.json', 'manifest/cli.json'],
@@ -136,6 +143,10 @@ async function preflightPublications(distRoot, publicRoot, frozenSchemaRoot) {
   publications.push({
     source: join(frozenSchemaRoot, 'grounding.v3.schema.json'),
     destination: join(publicRoot, 'schemas/grounding.v3.schema.json'),
+  });
+  publications.push({
+    source: join(frozenSchemaRoot, 'grounding.v4.schema.json'),
+    destination: join(publicRoot, 'schemas/grounding.v4.schema.json'),
   });
 
   await Promise.all(publications.map(async ({ source }) => {

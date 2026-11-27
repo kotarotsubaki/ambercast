@@ -446,7 +446,7 @@ describe('fake vertical slice', () => {
 
     const plan = PlanDocument.parse(JSON.parse(await storage.readText(layout.planPathFor(TEST_PATH))));
     expect(GroundingDocument.parse(JSON.parse(await storage.readText(layout.groundingPathFor(TEST_PATH))))).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: computePlanDigest(plan),
       entries: {},
     });
@@ -466,7 +466,7 @@ describe('fake vertical slice', () => {
     });
     // Path B covers a cold-start grounding miss; this test exercises only pre-seeded grounding.
     const seededGrounding: GroundingDocument = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: computePlanDigest(plan),
       entries: Object.fromEntries(sharedGroundingFixture.map(({ stepId, target, intentDigest, fingerprint }) => [
         stepId,
@@ -573,7 +573,7 @@ describe('fake vertical slice', () => {
     })]);
 
     const grounding = GroundingDocument.parse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: computePlanDigest(plan),
       entries: {
         'complete-sign-in': {

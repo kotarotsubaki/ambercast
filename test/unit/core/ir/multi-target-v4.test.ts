@@ -19,12 +19,12 @@ const parse = (value: unknown) => PlanDocument.safeParse(value);
 const planValidator = new Ajv2020({ strict: true }).compile(getPlanJsonSchema());
 const groundingValidator = new Ajv2020({ strict: true }).compile(getGroundingJsonSchema());
 
-describe('Plan v4 and grounding v2 contract', () => {
+describe('Current multi-target plan and grounding contracts', () => {
   it('rejects retired document versions and accepts the current versions', () => {
     expect(parse(makePlan()).success).toBe(true);
     expect(parse({ ...makePlan(), schemaVersion: 3 }).success).toBe(false);
     expect(parse({ ...makePlan(), schemaVersion: 4 }).success).toBe(false);
-    const current = { schemaVersion: 4, planDigest: 'b'.repeat(64), entries: {} };
+    const current = { schemaVersion: 5, planDigest: 'b'.repeat(64), entries: {} };
     expect(GroundingDocument.safeParse(current).success).toBe(true);
     expect(GroundingDocument.safeParse({ ...current, schemaVersion: 1 }).success).toBe(false);
     expect(planValidator(makePlan())).toBe(true);
@@ -128,9 +128,9 @@ describe('Plan v4 and grounding v2 contract', () => {
     expect(inputs({ ...config, A: { ...config.A, executor: { ...config.A.executor, browser: 'firefox' as never } } })).toBe(baseline);
   });
 
-  it('publishes v4 and v2 schema identities and the frozen v3 schema accepts a v3 fixture', () => {
+  it('publishes v5 schema identities and the frozen v3 schema accepts a v3 fixture', () => {
     expect(getPlanJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
-    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json');
+    expect(getGroundingJsonSchema().$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json');
     const frozen = JSON.parse(readFileSync(new URL('../../../../website/src/schemas-frozen/plan.v3.schema.json', import.meta.url), 'utf8'));
     const legacy = JSON.parse(readFileSync(new URL('../../../fixtures/ir/golden/plan.golden.artifact.json', import.meta.url), 'utf8'));
     expect(frozen.$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v3.schema.json');
@@ -138,10 +138,10 @@ describe('Plan v4 and grounding v2 contract', () => {
     expect(REPORT_SCHEMA_VERSION).toBe('3.12');
   });
 
-  it('emits the current build schemas with Plan v4, grounding v2, and report 3.12', () => {
+  it('emits the current build schemas with Plan v5, grounding v5, and report 3.12', () => {
     const readBuilt = (name: string) => JSON.parse(readFileSync(new URL(`../../../../dist/schema/${name}.schema.json`, import.meta.url), 'utf8'));
     expect(readBuilt('plan').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json');
-    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json');
+    expect(readBuilt('grounding').$id).toBe('https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json');
     expect(readBuilt('report').oneOf.every((variant: { properties: { schemaVersion: { const: string } } }) => variant.properties.schemaVersion.const === '3.12')).toBe(true);
   });
 });

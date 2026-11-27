@@ -53,7 +53,7 @@ async function writeFixture(project: string, baseUrl: string): Promise<{ planPat
       { id: 'see-submitted', kind: 'assert', check: 'text-visible', target: 'fixture', text: 'Submitted', confirms: ['click-primary'] },
     ],
   });
-  const grounding = GroundingDocument.parse({ schemaVersion: 4, planDigest: computePlanDigest(plan), entries: {} });
+  const grounding = GroundingDocument.parse({ schemaVersion: 5, planDigest: computePlanDigest(plan), entries: {} });
   const planPath = join(tests, 'heal-label-switch.ambercast.plan.json');
   const groundingPath = join(tests, 'heal-label-switch.ambercast.grounding.json');
   await Promise.all([

@@ -1,4 +1,5 @@
 import type { ElementRef, Fingerprint } from '../../src/core/ir/schema.js';
+import { computeAccessibilityFingerprint } from '#core/ir/fingerprint.js';
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-error.js';
 import { isAllowedSecretSinkOrigin, type SecretSinkPolicy } from '#core/secrets/sink-policy.js';
@@ -611,7 +612,15 @@ export function createFakeBrowserSession(
     async resolveGrounded(ref: ElementRef, query: GroundingQuery): Promise<GroundedResolution> {
       state.bindCalls += 1;
       state.operations.push({ type: 'resolve-grounded', target: ref, query });
-      return resolveBinding(state, ref, query);
+      const result = resolveBinding(state, ref, query);
+      if (result.kind !== 'hit') return result;
+      const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, ref, query.mode === 'compute' ? query.resolvedSecrets : []);
+      // Components describe the live neighborhood, so they accompany a hit only when the stored fingerprint equals it, as with the real adapter.
+      if (observed.kind === 'ok' && observed.fingerprint.hash === result.element.fingerprint.hash) {
+        Object.assign(result.element, { components: { ...observed.components } });
+        return { ...result, components: observed.components };
+      }
+      return result;
     },
     async snapshotForResolution(): Promise<PageSnapshot> {
       state.operations.push({ type: 'snapshot-for-resolution' });

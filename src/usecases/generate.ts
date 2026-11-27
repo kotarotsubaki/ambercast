@@ -35,7 +35,7 @@ import {
   GeneratedPlanResponseRequest,
   GeneratedPlanResponseForPolicy,
   GROUNDING_SCHEMA_VERSION,
-  GroundingDocument,
+  readGroundingDocument,
   PLAN_SCHEMA_VERSION,
   PlanDocument,
   type GroundingDocument as GroundingDocumentType,
@@ -393,6 +393,8 @@ async function freshPlan(
 }
 
 function emptyGrounding(plan: PlanDocumentType): GroundingDocumentType {
+  // Reading a supported legacy artifact does not justify replacing its evidence
+  // merely to obtain components or advance the document version.
   return { schemaVersion: GROUNDING_SCHEMA_VERSION, planDigest: computePlanDigest(plan), entries: {} };
 }
 
@@ -406,8 +408,8 @@ async function groundingIsCurrent(
   }
 
   try {
-    const parsed = GroundingDocument.safeParse(JSON.parse(await storage.readText(groundingPath)));
-    return parsed.success && parsed.data.planDigest === computePlanDigest(plan);
+    const parsed = readGroundingDocument(JSON.parse(await storage.readText(groundingPath)));
+    return parsed.planDigest === computePlanDigest(plan);
   } catch {
     return false;
   }

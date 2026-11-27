@@ -70,8 +70,12 @@ export const PLAN_SCHEMA_VERSION = 5 as const;
  * Version 3 replaces bare fingerprint-only element entries with intent-bound
  * accessibility locators carrying `locator`, `intentDigest`, and `provenance`.
  * Version 4 lets an element entry's locator carry an empty accessible name.
+ * Version 5 adds optional component evidence and ignored neighboring names.
  */
-export const GROUNDING_SCHEMA_VERSION = 4 as const;
+export const GROUNDING_SCHEMA_VERSION = 5 as const;
+
+/** Legacy versions accepted by the declared-version reader, without migration. */
+export const READABLE_OLD_GROUNDING_SCHEMA_VERSIONS = [4] as const;
 
 /**
  * Grounding versions treated as stale rather than eligible for compatibility reads.
@@ -1449,6 +1453,114 @@ export const ElementGroundingEntryV4 = z.strictObject({
 /** The parsed grounding v4 element entry. */
 export type ElementGroundingEntryV4 = z.infer<typeof ElementGroundingEntryV4>;
 
+/** Identifies a neighboring accessible-name contribution. */
+export type FingerprintNameSlot = 'parent' | 'siblingBefore' | 'siblingAfter';
+/** Validates a neighboring accessible-name slot. */
+export const FingerprintNameSlot = z.enum(['parent', 'siblingBefore', 'siblingAfter']);
+
+/** Separates target structure from independently changing neighboring names. */
+export type FingerprintComponents = {
+  readonly algorithm: 'a11y-components-v1';
+  readonly structure: string;
+  readonly parentName: string;
+  readonly siblingBeforeName: string | null;
+  readonly siblingAfterName: string | null;
+};
+/**
+ * Validates the complete, strict component record.
+ *
+ * @remarks All hashes use HexSha256. Missing siblings require null
+ * name hashes, never omitted fields; a synthetic-root parent still has a hash.
+ */
+export const FingerprintComponents = z.strictObject({
+  algorithm: z.literal('a11y-components-v1'),
+  structure: HexSha256,
+  parentName: HexSha256,
+  siblingBeforeName: HexSha256.nullable(),
+  siblingAfterName: HexSha256.nullable(),
+});
+
+// One strict shared record owns field validation and unknown-key rejection;
+// the branches below constrain only the relationships between optional fields.
+const ElementGroundingEntryFields = z.strictObject({
+  ...ElementGroundingEntryV4.shape,
+  components: FingerprintComponents.optional(),
+  ignoredNames: z.array(FingerprintNameSlot).optional(),
+}).meta({ id: 'ElementGroundingEntryFields' });
+
+// Both intersection operands reject unknown keys. The shared record validates
+// these fields; branches merely admit them without repeating their definitions.
+const SharedElementFieldPresence = {
+  kind: z.unknown(),
+  locator: z.unknown(),
+  fingerprint: z.unknown(),
+  intentDigest: z.unknown(),
+  provenance: z.unknown(),
+};
+
+const ComponentsWithSiblingBeforeName = FingerprintComponents.extend({ siblingBeforeName: HexSha256 });
+const ComponentsWithSiblingAfterName = FingerprintComponents.extend({ siblingAfterName: HexSha256 });
+const ComponentsWithBothSiblingNames = FingerprintComponents.extend({
+  siblingBeforeName: HexSha256,
+  siblingAfterName: HexSha256,
+});
+
+/**
+ * Validates an element record without accepting unknown fields.
+ *
+ * @remarks Enumerated structural branches require components whenever
+ * ignoredNames exists, with non-null hashes for every named slot. Enumerating
+ * ordered nonempty tuples preserves uniqueness and ordering in public JSON
+ * Schema as well as runtime validation.
+ * One invalid entry invalidates the whole document. Shape validation does
+ * not prove that fingerprint and components came from the same observation.
+ */
+export const ElementGroundingEntryV5 = z.intersection(ElementGroundingEntryFields, z.union([
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: FingerprintComponents.optional(),
+    ignoredNames: z.never().optional(),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: FingerprintComponents,
+    ignoredNames: z.tuple([z.literal('parent')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithSiblingBeforeName,
+    ignoredNames: z.tuple([z.literal('siblingBefore')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithSiblingAfterName,
+    ignoredNames: z.tuple([z.literal('siblingAfter')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithSiblingBeforeName,
+    ignoredNames: z.tuple([z.literal('parent'), z.literal('siblingBefore')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithSiblingAfterName,
+    ignoredNames: z.tuple([z.literal('parent'), z.literal('siblingAfter')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithBothSiblingNames,
+    ignoredNames: z.tuple([z.literal('siblingBefore'), z.literal('siblingAfter')]),
+  }),
+  z.strictObject({
+    ...SharedElementFieldPresence,
+    components: ComponentsWithBothSiblingNames,
+    ignoredNames: z.tuple([z.literal('parent'), z.literal('siblingBefore'), z.literal('siblingAfter')]),
+  }),
+]));
+
+/** An element record with structurally validated component and slot combinations. */
+export type ElementGroundingEntryV5 = z.infer<typeof ElementGroundingEntryV5>;
+
 /**
  * Validates grounding recorded for an AI-directed step.
  *
@@ -1474,11 +1586,11 @@ export type AiGroundingEntry = z.infer<typeof AiGroundingEntry>;
  * Validates the distinct grounding records for element-based and AI-directed
  * steps.
  *
- * The discriminator separates intent-bound v4 element evidence (locator,
+ * The kind separates intent-bound element evidence (locator,
  * fingerprint, intent digest, and provenance) from an AI execution trace.
  */
-export const GroundingEntry = z.discriminatedUnion('kind', [
-  ElementGroundingEntryV4,
+export const GroundingEntry = z.union([
+  ElementGroundingEntryV5,
   AiGroundingEntry,
 ]);
 
@@ -1746,9 +1858,8 @@ export type GeneratedInstructionCoveredPlanResponse = Omit<
  * previously good trace and prevents a failed or partial execution from
  * becoming replay data.
  *
- * Grounding keeps literal version 1 when instruction coverage is installed.
- * Compatibility lives only in the optional nested trace mapping; it does not
- * introduce a second document version or weaken Plan IR freshness.
+ * Legacy document reads use a separate schema so the write boundary always
+ * validates the current format.
  */
 export const GroundingDocument = z.strictObject({
   schemaVersion: z.literal(GROUNDING_SCHEMA_VERSION),
@@ -1760,6 +1871,46 @@ export const GroundingDocument = z.strictObject({
  * The parsed grounding cache for a particular generated plan.
  */
 export type GroundingDocument = z.infer<typeof GroundingDocument>;
+
+/**
+ * Preserves the declared v4 document shape independently of the current-version
+ * document type so advancing the write version cannot change legacy reads.
+ * The legacy element entry and AI entry may be reused without coupling the
+ * document's version discriminator to the current write format.
+ */
+export type GroundingDocumentV4 = {
+  readonly schemaVersion: 4;
+  readonly planDigest: string;
+  readonly entries: Record<string, ElementGroundingEntryV4 | AiGroundingEntry>;
+};
+/**
+ * Validates the frozen legacy document shape.
+ *
+ * @remarks A document declaring v4 rejects components and ignoredNames,
+ * even though these fields are legal in the current write format.
+ */
+export const GroundingDocumentV4: z.ZodType<GroundingDocumentV4> = z.strictObject({
+  schemaVersion: z.literal(READABLE_OLD_GROUNDING_SCHEMA_VERSIONS[0]),
+  planDigest: HexSha256,
+  entries: z.record(StepId, z.discriminatedUnion('kind', [ElementGroundingEntryV4, AiGroundingEntry])),
+});
+
+/** A validated document retaining its declared version for canonical checks. */
+export type ReadGroundingDocument = GroundingDocumentV4 | GroundingDocument;
+
+/**
+ * Reads grounding using the schema for its declared version.
+ *
+ * @param value - Decoded, untrusted grounding JSON.
+ * @returns A validated document preserving the read version and shape.
+ * @throws When the version or document shape is unsupported or invalid.
+ * @remarks Callers compare coverage-bearing source text against this
+ * read-version form before using it in the current format. Reading alone
+ * never migrates or rewrites the artifact.
+ */
+export function readGroundingDocument(value: unknown): ReadGroundingDocument {
+  return z.union([GroundingDocumentV4, GroundingDocument]).parse(value);
+}
 
 /** AI grounding entry whose trace may carry additive coverage storage. */
 export type AiGroundingEntryWithCoverageStorage = Omit<AiGroundingEntry, 'trace'> & {

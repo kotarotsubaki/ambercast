@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { Ajv2020 } from 'ajv/dist/2020.js';
 import { describe, expect, it } from 'vitest';
 import { getGroundingJsonSchema, getPlanJsonSchema } from '../../../../src/core/ir/json-schema.js';
-import { GroundingDocument, PlanDocument } from '../../../../src/core/ir/schema.js';
+import { GroundingDocument, PlanDocument, readGroundingDocument } from '../../../../src/core/ir/schema.js';
 
 type DocumentKind = 'plan' | 'grounding';
 type ExpectedVerdict = 'valid' | 'invalid';
@@ -121,6 +121,16 @@ describe('IR JSON Schema corpus equivalence', () => {
     expect(ajvVerdict).toBe(zodVerdict);
   });
 
+  it.each(corpus.filter((fixture) => fixture.document === 'grounding'))('$name retains its verdict through the legacy reader and frozen schema', (fixture) => {
+    const value = fixture.value as Record<string, unknown>;
+    const legacy = { ...value, ...(value.schemaVersion === 5 ? { schemaVersion: 4 } : {}) };
+    const frozen = JSON.parse(readFileSync(new URL('../../../../website/src/schemas-frozen/grounding.v4.schema.json', import.meta.url), 'utf8'));
+    const validate = new Ajv2020({ strict: true }).compile(frozen);
+    expect(validate(legacy)).toBe(fixture.expected === 'valid');
+    if (fixture.expected === 'valid') expect(readGroundingDocument(legacy)).toEqual(legacy);
+    else expect(() => readGroundingDocument(legacy)).toThrow();
+  });
+
   // SPEC-C1 C1-1
   it.each(corpus.filter((fixture) => fixture.document === 'plan' && fixture.expected === 'invalid' && fixture.name !== 'plan-invalid-v3-retired.json'))(
     '$name remains invalid for a schema reason other than the retired schemaVersion literal',
@@ -213,8 +223,8 @@ describe('IR JSON Schema documents', () => {
       'grounding',
       getGroundingJsonSchema,
       {
-        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json',
-        title: 'ambercast grounding schema v4',
+        $id: 'https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json',
+        title: 'ambercast grounding schema v5',
         description: 'Validates the committed grounding cache associated with one plan digest.',
       },
     ],
@@ -227,7 +237,7 @@ describe('IR JSON Schema documents', () => {
   });
 
   // SPEC-C1 C1-2
-  it('publishes Plan v5 instruction coverage and Grounding-v4 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
+  it('publishes Plan v5 instruction coverage and Grounding-v5 trace coverage (SPEC-1, SPEC-3, SPEC-7)', () => {
     const planV5 = {
       schemaVersion: 5,
       source: { inputsDigest: 'a'.repeat(64) },
@@ -245,7 +255,7 @@ describe('IR JSON Schema documents', () => {
       }],
     };
     const coveredGroundingV4 = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       planDigest: 'b'.repeat(64),
       entries: {
         'reach-dashboard': {

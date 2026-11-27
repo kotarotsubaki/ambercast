@@ -28,6 +28,12 @@ description: "本章定义其他章节按名称引用的共享对象和标量契
 | `QuotedElementIntent`（扩展 `ElementIntent`） | `quote` | `Quote` | required | strict nested object | 必需的 UI 文本字面引用。 | `src/core/ir/schema.ts:424` |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | 定位器证据格式。 | `src/core/ir/schema.ts:320` |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | 小写 SHA-256。 | `src/core/ir/schema.ts:35,321` |
+| `FingerprintComponents` | `algorithm` | string | required | literal `a11y-components-v1` | 组成部分算法。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `structure` | `HexSha256` | required | lowercase SHA-256 | 目标名称与邻近节点角色。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `parentName` | `HexSha256` | required | lowercase SHA-256 | 直接父节点名称。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingBeforeName` | `HexSha256` or null | required | null iff sibling absent | 前一个兄弟节点名称；不存在时为 null。 | `src/core/ir/schema.ts:1462-1481` |
+|  | `siblingAfterName` | `HexSha256` or null | required | null iff sibling absent | 后一个兄弟节点名称；不存在时为 null。 | `src/core/ir/schema.ts:1462-1481` |
+| `FingerprintNameSlot` | — | string | value | enum `parent`, `siblingBefore`, `siblingAfter` | 按固定顺序排列的邻近节点名称槽位。 | `src/core/ir/schema.ts:1457` |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | 基于 1 的 UTF-16 起始行。 | `src/core/ir/schema.ts:372` |
 |  | `startColumn` | integer | required | positive | 基于 1 的 UTF-16 起始列。 | `src/core/ir/schema.ts:373` |
 |  | `endLine` | integer | required | positive | 基于 1 的 UTF-16 结束行。 | `src/core/ir/schema.ts:374` |

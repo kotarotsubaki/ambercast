@@ -40,6 +40,11 @@ function fingerprint(ref: ElementRef, refs: readonly ElementRef[] = REFS) {
   if (result.kind !== 'ok') throw new Error('The fixture needs a unique fingerprintable element.');
   return result.fingerprint;
 }
+function components(ref: ElementRef, refs: readonly ElementRef[] = REFS) {
+  const result = computeAccessibilityFingerprint(tree(refs), ref, []);
+  if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
+  return result.components;
+}
 function intent(ref: ElementRef): ReturnType<typeof quotedIntent>;
 function intent(ref: ElementRef, quoted: boolean): ReturnType<typeof unquotedIntent> & { quote?: ReturnType<typeof quotedIntent>['quote'] };
 function intent(ref: ElementRef, quoted = true) {
@@ -66,7 +71,7 @@ const secretFill: TestStep = { id: 'fill-password', kind: 'action', action: 'fil
 function entry(step: TestStep, locator: ElementRef = SUBMIT, provenance: 'quoted-match' | 'ai-proposed' = 'quoted-match') {
   if ((step.kind !== 'action' && step.kind !== 'capture') || !('intent' in step)) throw new Error('Expected an element step.');
   return {
-    kind: 'element' as const, locator, fingerprint: fingerprint(locator), provenance,
+    kind: 'element' as const, locator, fingerprint: fingerprint(locator), components: components(locator), provenance,
     intentDigest: computeIntentDigest({ stepKind: step.kind, operation: step.kind === 'capture' ? 'capture' : step.action, intent: step.intent }),
   };
 }
@@ -222,7 +227,7 @@ describe('completion save', () => {
   it.each(['missing step', 'navigate step', 'grounding provenance', 'missing provenance'] as const)(
     'TEST-SAVE-4 rejects a second %s without mutating any binding', (fault) => {
       type Context = Parameters<typeof planCompletionPromotions>[0];
-      const first = { stage: 'acted', locator: SUBMIT, fingerprint: fingerprint(SUBMIT), provenance: 'quoted-match', quoteWaitMs: 0 } as const;
+      const first = { stage: 'acted', locator: SUBMIT, fingerprint: fingerprint(SUBMIT), components: components(SUBMIT), provenance: 'quoted-match', quoteWaitMs: 0 } as const;
       const second = { ...first, provenance: fault === 'grounding provenance' ? 'grounding' : fault === 'missing provenance' ? undefined : 'ai-proposed' };
       const preserved = { ...first, stage: 'confirmed' } as const;
       const context = {
@@ -247,7 +252,7 @@ describe('completion save', () => {
 
   it('plans only acted bindings in insertion order without changing metadata or cached entries', () => {
     type Context = Parameters<typeof planCompletionPromotions>[0];
-    const state = { stage: 'acted', locator: SUBMIT, fingerprint: fingerprint(SUBMIT), provenance: 'quoted-match', quoteWaitMs: 12 } as const;
+    const state = { stage: 'acted', locator: SUBMIT, fingerprint: fingerprint(SUBMIT), components: components(SUBMIT), provenance: 'quoted-match', quoteWaitMs: 12 } as const;
     const proposed = { ...state, provenance: 'ai-proposed', aiProposalMs: 34 } as const;
     const context: Context = {
       bindingStates: new Map<string, Context['bindingStates'] extends ReadonlyMap<string, infer Value> ? Value : never>([

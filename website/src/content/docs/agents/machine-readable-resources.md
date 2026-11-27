@@ -28,10 +28,11 @@ These are the files you can fetch, and the rule that says which of them to trust
 | [`schemas/grounding.v2.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v2.schema.json) | available |
 | [`schemas/grounding.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v3.schema.json) | available |
 | [`schemas/grounding.v4.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v4.schema.json) | available |
+| [`schemas/grounding.v5.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json) | available |
 | [`schemas/report.v3.schema.json`](https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json) | available |
 | [`capabilities.json`](https://kotarotsubaki.github.io/ambercast/capabilities.json) | available |
 | [`manifest/cli.json`](https://kotarotsubaki.github.io/ambercast/manifest/cli.json) | available |
 
-The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, and `grounding.v3` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v4, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
+The `plan.v2`, `plan.v3`, `plan.v4`, `grounding.v2`, `grounding.v3`, and `grounding.v4` schemas are frozen snapshots committed in the repository and copied to the site unchanged. The config, Plan v5, Grounding v5, and report schemas, `capabilities.json`, and `manifest/cli.json` are copied byte for byte from the build that also goes into the npm package.
 
 Related: [Using ambercast from an AI agent](/ambercast/agents/overview/), [JSON Schemas](/ambercast/reference/json-schemas/), [Status and roadmap](/ambercast/explanation/status-and-roadmap/)

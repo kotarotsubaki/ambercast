@@ -23,6 +23,29 @@ description: "この章は、グラウンディングが要素ステップごと
 
 子孫と、隣接しない兄弟は、プリイメージに含めてはならない（MUST NOT）（`src/core/ir/fingerprint.ts:46-50`）。
 
+## 成分 {#components}
+
+省略可能な `components` レコードは `a11y-components-v1` を用い、完全な指紋と同じ正規化済みの記述子から作る。各ハッシュは、[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)の正準 UTF-8 JSON の SHA-256 を小文字の16進数で表す（`src/core/ir/fingerprint.ts:74-94`）。
+
+| 項目 | 正準 JSON のプリイメージ |
+| --- | --- |
+| `structure` | `{ role, name, parentRole, siblingBeforeRole, siblingAfterRole }` |
+| `parentName` | `{ slot: "parent", name }` |
+| `siblingBeforeName` | `{ slot: "siblingBefore", name }` |
+| `siblingAfterName` | `{ slot: "siblingAfter", name }` |
+
+`structure` の `name` は対象の正規化済みの名前である。`role`、`parentRole`、`siblingBeforeRole`、`siblingAfterRole` はロールを厳密に保持する。兄弟が存在しなければそのロールは `null` になる。
+
+各スロットのプリイメージの `name` は、その隣接要素の正規化済みの名前である。兄弟が存在しなければプリイメージを作らず、名前のハッシュを `null` とする。
+
+最上位の対象の `parentName` は、合成ルートの空の名前をハッシュするため、値は変わらない。
+
+生成時は、記述子のすべてのロールと名前を秘匿値の汚染について検査してから、指紋と成分を作る。汚染があれば両方とも作らない。対にならないサロゲートがある場合も両方とも作らない。
+
+照合と操作直前の再確認は既存の検査を維持し、秘匿値の汚染による拒否を追加しない（`src/core/ir/fingerprint.ts:343-448`）。
+
+エントリに `components` や `ignoredNames` がある場合も、完全な指紋で照合しなければならない（MUST）。現在の実装は `ignoredNames` を書き込まない。
+
 ## ダイジェスト {#digest}
 
 実装は、記述子を[正準 JSON](/ambercast/ja/spec/canonical-json/#digest-form)で直列化し、その SHA-256 を計算しなければならない（MUST）（`src/core/ir/fingerprint.ts:6`、`src/core/ir/digest.ts:35`）。

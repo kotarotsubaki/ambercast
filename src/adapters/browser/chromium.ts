@@ -47,7 +47,7 @@ import {
   computeAccessibilityFingerprint,
   resolveAccessibilityFingerprint,
 } from '#core/ir/fingerprint.js';
-import type { ElementRef, Fingerprint, TargetDefinition } from '#core/ir/schema.js';
+import type { ElementRef, Fingerprint, FingerprintComponents, TargetDefinition } from '#core/ir/schema.js';
 import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
 import { isAllowedSecretSinkOrigin } from '#core/secrets/sink-policy.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
@@ -582,8 +582,9 @@ class ChromiumBrowserSession implements BrowserSession {
         }
 
         const result = resolveAccessibilityFingerprint(capture.tree, recordedRef, expectedFingerprint);
+        const observed = result === 'hit' ? computeAccessibilityFingerprint(capture.tree, recordedRef, []) : undefined;
         return result === 'hit'
-          ? { kind: 'hit', element: this.mintBoundElement(recordedRef, expectedFingerprint, after) }
+          ? { kind: 'hit', element: this.mintBoundElement(recordedRef, expectedFingerprint, after, observed?.kind === 'ok' ? observed.components : undefined), ...(observed?.kind === 'ok' ? { components: observed.components } : {}) }
           : { kind: 'miss', reason: result };
       }
 
@@ -591,7 +592,8 @@ class ChromiumBrowserSession implements BrowserSession {
       if (result.kind === 'ok') {
         return {
           kind: 'hit',
-          element: this.mintBoundElement(recordedRef, result.fingerprint, after),
+          element: this.mintBoundElement(recordedRef, result.fingerprint, after, result.components),
+          components: result.components,
         };
       }
 
@@ -683,10 +685,12 @@ class ChromiumBrowserSession implements BrowserSession {
     ref: ElementRef,
     fingerprint: Fingerprint,
     generation: number,
+    components?: FingerprintComponents,
   ): BoundElement {
     const element: BoundElement = {
       ref: copyElementRef(ref),
       fingerprint: copyFingerprint(fingerprint),
+      ...(components === undefined ? {} : { components: { ...components } }),
     };
     this.#bindings.set(element, {
       generation,

@@ -27,6 +27,12 @@ All other chapters MUST use these definitions rather than restating their shapes
 | `QuotedElementIntent` (extends `ElementIntent`) | `quote` | `Quote` | required | strict nested object | Required literal UI-text quote. | repo:src/core/ir/schema.ts:424 |
 | `Fingerprint` | `algorithm` | string | required | literal `a11y-neighborhood-v2` | Locator-evidence format. | repo:src/core/ir/schema.ts:320 |
 |  | `hash` | string | required | `/^[0-9a-f]{64}$/` | Lowercase SHA-256. | repo:src/core/ir/schema.ts:35,321 |
+| `FingerprintComponents` | `algorithm` | string | required | literal `a11y-components-v1` | Component algorithm. | repo:src/core/ir/schema.ts:1462-1481 |
+|  | `structure` | `HexSha256` | required | lowercase SHA-256 | Target name and neighborhood roles. | repo:src/core/ir/schema.ts:1462-1481 |
+|  | `parentName` | `HexSha256` | required | lowercase SHA-256 | Direct parent name. | repo:src/core/ir/schema.ts:1462-1481 |
+|  | `siblingBeforeName` | `HexSha256` or null | required | null iff sibling absent | Preceding sibling name; null when absent. | repo:src/core/ir/schema.ts:1462-1481 |
+|  | `siblingAfterName` | `HexSha256` or null | required | null iff sibling absent | Following sibling name; null when absent. | repo:src/core/ir/schema.ts:1462-1481 |
+| `FingerprintNameSlot` | — | string | value | enum `parent`, `siblingBefore`, `siblingAfter` | Ordered neighbor-name slot vocabulary. | repo:src/core/ir/schema.ts:1457 |
 | `InstructionSourceSpan` | `startLine` | integer | required | positive | One-based UTF-16 start line. | repo:src/core/ir/schema.ts:372 |
 |  | `startColumn` | integer | required | positive | One-based UTF-16 start column. | repo:src/core/ir/schema.ts:373 |
 |  | `endLine` | integer | required | positive | One-based UTF-16 end line. | repo:src/core/ir/schema.ts:374 |

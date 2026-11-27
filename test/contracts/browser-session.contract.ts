@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ElementRef, Fingerprint } from '../../src/core/ir/schema.js';
+import { FingerprintComponents, type ElementRef, type Fingerprint } from '../../src/core/ir/schema.js';
 import type { BoundElement, BrowserSession, GroundingMissReason } from '../../src/ports/browser.js';
 
 export type BrowserSessionContractScenario =
@@ -215,20 +215,20 @@ export function registerBrowserSessionContract(harness: BrowserSessionContractHa
 
       await withSession(harness, setup, async (session) => {
         const expected = await actualFingerprintFor(harness, session, setup);
-        await expect(session.resolveGrounded(REF, {
-          mode: 'verify',
-          fingerprint: expected,
-        })).resolves.toEqual({
-          kind: 'hit',
-          element: expect.objectContaining({ ref: REF, fingerprint: expected }),
-        });
-        await expect(session.resolveGrounded(REF, {
-          mode: 'compute',
-          resolvedSecrets: [],
-        })).resolves.toEqual({
-          kind: 'hit',
-          element: expect.objectContaining({ ref: REF, fingerprint: expected }),
-        });
+        for (const query of [{ mode: 'verify', fingerprint: expected }, { mode: 'compute', resolvedSecrets: [] }] as const) {
+          const result = await session.resolveGrounded(REF, query);
+          expect(result.kind).toBe('hit');
+          if (result.kind !== 'hit') throw new Error('The matching descriptor must bind.');
+          const { components, ...binding } = result;
+          expect(binding).toEqual({
+            kind: 'hit',
+            element: expect.objectContaining({ ref: REF, fingerprint: expected }),
+          });
+          if (components !== undefined) {
+            expect(FingerprintComponents.safeParse(components).success).toBe(true);
+            expect(result.element.components).toEqual(components);
+          }
+        }
       });
     });
 

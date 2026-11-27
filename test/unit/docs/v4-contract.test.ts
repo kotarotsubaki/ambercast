@@ -139,9 +139,13 @@ describe('TEST-21 v4 documentation golden expectations', () => {
     expect(values).not.toMatch(/\|\s*`browser`\s*\|/);
     const grounding = spec('grounding-document');
     expect(grounding).toContain(`literal \`${expected.versions.grounding}\``);
-    expect(grounding).toMatch(/"schemaVersion":\s*4/);
+    expect(grounding).toMatch(/"schemaVersion":\s*5/);
     expect(grounding).toContain('`element`');
     expect(grounding).not.toMatch(/`target`,\s*`(?:key|value|text|count)`/);
+  });
+
+  it('documents continued readability of v4 grounding documents', () => {
+    expect(spec('grounding-document')).toContain('Consumers accept v4 documents after validating their original v4 shape.');
   });
 
   it('documents referenced target projection, fixed vocabulary, and version history', () => {

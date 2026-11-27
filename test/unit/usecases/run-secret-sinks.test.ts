@@ -181,7 +181,7 @@ async function seedFreshArtifacts(
   const plan = await createFreshPlan(storage, testPath, steps);
   const layout = createLayoutResolver({ testDir: TEST_DIR, runsDir: RUNS_DIR });
   const grounding: GroundingDocument = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     planDigest: computePlanDigest(plan),
     entries,
   };

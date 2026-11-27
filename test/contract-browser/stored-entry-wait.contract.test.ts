@@ -272,11 +272,13 @@ describe('stored entry waits for a page that is still switching', () => {
     expectOperatedIncomingOnly(observation, delayMs);
   });
 
-  it('TEST-LIVE-3 stops at the first miss, without operating either button, when fresh verification is denied', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async () => {
+  it('TEST-LIVE-3 repeats the sticky miss until the step deadline, then stops without operating either button, when fresh verification is denied', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async () => {
     const delayMs = 1500;
     const { recorded, replays } = await liveScenario({
       mode: 'a', replayDelayMs: delayMs,
       // The existence wait stays: only fresh stored-entry verification results are denied.
+      // The first miss is replayed on every later verification, so the product repeats
+      // until the step deadline and fails on that same sticky miss.
       replays: [{ executor: withInstrument({ stickyFirstMiss: true }) }, { executor: withInstrument() }],
     });
     const [mutation, control] = replays as [LiveObservation, LiveObservation];

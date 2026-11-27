@@ -55,8 +55,11 @@ async function fixture(caseTimeoutMs: number, resolveTimeoutMs = 5000, appearsAt
   const path = scenario.deps.layout.groundingPathFor(healing.OPTIONS.files[0]!);
   const original = await scenario.storage.readText(path);
   const replays: { resolve: boolean; start: number; end: number; before: string; after: string }[] = [];
+  // The storage each replay actually received: after heal returns, the overlay itself must still hold the original bytes.
+  const overlays: typeof scenario.deps.storage[] = [];
   const actualRun = runModule.run;
   vi.spyOn(runModule, 'run').mockImplementation(async (deps, options) => {
+    overlays.push(deps.storage);
     const start = clock.monotonicMs();
     const before = await deps.storage.readText(path);
     const result = await actualRun(deps, options);
@@ -72,7 +75,12 @@ async function fixture(caseTimeoutMs: number, resolveTimeoutMs = 5000, appearsAt
       heal: { caseTimeoutMs, maxStepRepairs: 1 },
     },
   };
-  return { ...scenario, deps, clock, original, path, replays, sessions, execute, executeAgentic };
+  return { ...scenario, deps, clock, original, path, replays, overlays, sessions, execute, executeAgentic };
+}
+
+async function expectOverlaysUnchanged(f: Awaited<ReturnType<typeof fixture>>) {
+  expect(f.overlays.length).toBeGreaterThan(0);
+  for (const overlay of f.overlays) expect(await overlay.readText(f.path)).toBe(f.original);
 }
 
 describe('TEST-WAIT-14 heal stored-entry waiting', () => {
@@ -95,6 +103,7 @@ describe('TEST-WAIT-14 heal stored-entry waiting', () => {
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stopReason: 'deadline', finalFirstFailureIndex: 0, repairTrace: [], aiCalls: 0 });
     expect(result.commits.size).toBe(0);
     expect(await f.storage.readText(f.path)).toBe(f.original);
+    await expectOverlaysUnchanged(f);
   });
 
   it.each([
@@ -120,6 +129,7 @@ describe('TEST-WAIT-14 heal stored-entry waiting', () => {
       expect(result.commits.size).toBe(0);
     }
     expect(await f.storage.readText(f.path)).toBe(f.original);
+    await expectOverlaysUnchanged(f);
   });
 
   it('uses a delayed stored hit in the repair replay without dispatching AI for the step', async () => {
@@ -141,5 +151,6 @@ describe('TEST-WAIT-14 heal stored-entry waiting', () => {
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'healed', stopReason: 'settled', finalFirstFailureIndex: 1, aiCalls: 0 });
     expect(result.outcome.results[0]?.steps[0]).toMatchObject({ status: 'passed', binding: { provenance: 'grounding' } });
     expect(await f.storage.readText(f.path)).toBe(f.original);
+    await expectOverlaysUnchanged(f);
   });
 });

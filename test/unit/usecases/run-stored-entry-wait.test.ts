@@ -79,9 +79,22 @@ async function fixture(options: {
   scenario.recordingStorage.writes.length = 0;
   const presence = vi.spyOn(session, 'awaitElementPresence');
   const perform = vi.spyOn(session, 'perform');
+  const rawSnapshot = session.accessibilitySnapshot.bind(session);
   const snapshots = vi.spyOn(session, 'accessibilitySnapshot');
   const verifyTimes: number[] = [];
   const trace: string[] = [];
+  // Replacement observations (made while choosing a target) and diagnostic observations
+  // (made after a failure to describe it) are told apart by the calling phase: only the
+  // diagnostic capture runs inside captureObservedEvidence.
+  const observations: { phase: 'replacement' | 'diagnostic'; aborted: boolean; verifyTimes: number[] }[] = [];
+  const observe = (impl: () => ReturnType<typeof rawSnapshot> = rawSnapshot) => snapshots.mockImplementation(async () => {
+    observations.push({
+      phase: /captureObservedEvidence/.test(new Error().stack ?? '') ? 'diagnostic' : 'replacement',
+      aborted: options.controller?.signal.aborted ?? false,
+      verifyTimes: [...verifyTimes],
+    });
+    return impl();
+  });
   const original = session.resolveGrounded.bind(session);
   const resolveGrounded = vi.spyOn(session, 'resolveGrounded').mockImplementation(async (ref, query) => {
     trace.push(query.mode);
@@ -89,7 +102,7 @@ async function fixture(options: {
     return original(ref, query);
   });
   return { ...scenario, deps, clock, session, stored, snapshot, live, executor, presence, perform, snapshots,
-    resolveGrounded, verifyTimes, trace, before, groundingPath,
+    resolveGrounded, verifyTimes, trace, before, groundingPath, observations, observe,
     change(change: Record<string, string | boolean> = {}) {
       snapshot.accessibilityTree = neighborTree(change);
       live.get(elementRefKey(RELAX_REF))!.currentFingerprint = observation(snapshot.accessibilityTree).fingerprint;
@@ -353,13 +366,13 @@ describe('stored entry verification deadlines', () => {
 
   it('TEST-WAIT-9 aborts an invalid replacement observation without AI', async () => {
     const f = await fixture({ timeout: 300, change: { parentRole: 'form' } });
-    let resolutionObservations = 0;
-    f.snapshots.mockImplementation(async () => {
-      // Only the first capture belongs to replacement; later captures diagnose its failure.
-      if (resolutionObservations++ === 0) expect(f.verifyTimes).toEqual([0, 100, 200, 300]);
-      return { rawYaml: 'invalid', scalarValues: [], tree: SNAPSHOT_INVALID };
-    });
+    f.observe(async () => ({ rawYaml: 'invalid', scalarValues: [], tree: SNAPSHOT_INVALID }));
     const result = await f.execute(true);
+    // Exactly one replacement observation, made after the last stored verification; the
+    // failure diagnostics that follow are not part of this count.
+    const replacement = f.observations.filter(observation => observation.phase === 'replacement');
+    expect(replacement).toHaveLength(1);
+    expect(replacement[0]!.verifyTimes).toEqual([0, 100, 200, 300]);
     expect(result.report.exitCode).toBe(3);
     expect(result.outcome.results[0]!.error).toMatchObject({ details: { reason: 'grounding-snapshot-invalid' } });
     expect(f.clock.sleepCalls).toEqual([100, 100, 100]);
@@ -387,8 +400,33 @@ describe('stored entry verification deadlines', () => {
   ])('TEST-WAIT-10 learns exclusions from $name only', async ({ results, ignored, expected }) => {
     const f = await fixture({ timeout: 300, change: { siblingBefore: 'Beta' }, ...(ignored ? { ignored } : {}) });
     f.script(results);
+    const scripted = f.resolveGrounded.getMockImplementation()!;
+    const queries: { query: unknown; copy: unknown }[] = [];
+    let replacing = false;
+    f.snapshots.mockImplementation(async () => {
+      replacing = true;
+      return { rawYaml: 'stable-submit', scalarValues: [], tree: f.snapshot.accessibilityTree };
+    });
+    // Before replacement every verification entry must see the stored entry and the whole
+    // query exactly as recorded, with no grounding write and no replacement observation:
+    // learned names may be added only after the final verification.
+    f.resolveGrounded.mockImplementation(async (ref, query) => {
+      if (!replacing) {
+        expect(query).toEqual({
+          mode: 'verify', fingerprint: f.stored.fingerprint, components: f.stored.components,
+          ...(ignored ? { ignoredNames: ignored } : {}),
+        });
+        for (const seen of queries) expect(seen.query).toEqual(seen.copy);
+        queries.push({ query, copy: structuredClone(query) });
+        expect(await f.deps.storage.readText(f.groundingPath)).toBe(f.before);
+        expect(f.recordingStorage.writes.filter(write => write.path === f.groundingPath)).toEqual([]);
+        expect(f.snapshots).not.toHaveBeenCalled();
+      }
+      return scripted(ref, query);
+    });
     const result = await f.execute(true);
     expect(result.result.status).toBe('passed');
+    expect(queries).toHaveLength(4);
     expect(f.resolveGrounded.mock.calls.slice(0, 4).map(call => call[1].mode)).toEqual(['verify', 'verify', 'verify', 'verify']);
     expect(f.clock.sleepCalls).toEqual([100, 100, 100]);
     const saved = (await f.read()).entries.click;
@@ -464,16 +502,12 @@ describe('stored entry verification deadlines', () => {
       controller.abort(new Error('Test cancellation.'));
       return ms;
     } });
-    let snapshotsBeforeAbort = 0;
-    const snapshot = f.snapshots.getMockImplementation();
-    f.snapshots.mockImplementation(async () => {
-      if (!controller.signal.aborted) snapshotsBeforeAbort++;
-      return snapshot ? snapshot() : { rawYaml: 'diagnostic', scalarValues: [], tree: f.snapshot.accessibilityTree };
-    });
+    f.observe();
     const result = await f.execute(resolve);
     expect(f.resolveGrounded).toHaveBeenCalledTimes(1);
     expect(f.clock.sleepCalls).toEqual([100]);
-    expect(snapshotsBeforeAbort).toBe(0);
+    // Diagnostic observations after the interruption keep their current behavior.
+    expect(f.observations.filter(observation => observation.phase === 'replacement')).toEqual([]);
     expect(f.perform).not.toHaveBeenCalled();
     expect(f.resolveAiExecutor).not.toHaveBeenCalled();
     expect(result.result).toMatchObject({ status: 'error', explanation: 'The run was interrupted.' });
@@ -488,9 +522,11 @@ describe('stored entry verification deadlines', () => {
     const controller = new AbortController();
     const f = await fixture({ timeout: 300, controller });
     f.presence.mockImplementation(async () => { controller.abort(new Error('Presence cancellation.')); });
+    f.observe();
     const result = await f.execute(resolve);
     expect(f.presence).toHaveBeenCalledTimes(1);
     expect(f.resolveGrounded).not.toHaveBeenCalled();
+    expect(f.observations.filter(observation => observation.phase === 'replacement')).toEqual([]);
     expect(f.perform).not.toHaveBeenCalled();
     expect(f.resolveAiExecutor).not.toHaveBeenCalled();
     expect(f.clock.sleepCalls).toEqual([]);

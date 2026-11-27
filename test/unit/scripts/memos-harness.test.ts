@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readPidFile } from '../../support/pid-file.js';
 // @ts-expect-error The production ESM script is deliberately untyped JavaScript.
 import { assertPortFree, bootstrapAdmin, BootstrapError, buildChildEnv, buildProjectPackageJson, createDockerRunner, createExec, createRunRoot, createTeardown, defaultIsPidAlive, generateAdminPassword, HarnessError, reapStale, ReadyError, RunnerError, runProcess, secretEnvName, summarizeAiCalls, TerminationUnconfirmedError, waitReady } from '../../../scripts/lib/memos-harness.mjs';
 
@@ -764,7 +765,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
     try {
       const started = Date.now();
       const result = await runProcess('sh', ['-c', 'trap "" TERM; echo $$ > "$1"; sleep 30 & wait', 'memos-test', pidFile], { timeoutMs: 100 });
-      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      pid = await readPidFile(pidFile, Date.now() + 2000);
       expect(result.signal).toBe('SIGKILL');
       expect(result).toMatchObject({ termination: 'confirmed', pgid: pid });
       expect(Date.now() - started).toBeLessThan(12_000);
@@ -772,7 +773,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       expect(() => process.kill(-pid!, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
     } finally {
       kill.mockRestore();
-      if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (!pid) try { pid = await readPidFile(pidFile, Date.now()); } catch { /* Cleanup must preserve the original failure. */ }
       if (pid) try { realKill(-pid, 'SIGKILL'); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
@@ -792,7 +793,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
     try {
       const started = Date.now();
       const result = await runProcess('sh', ['-c', 'trap "" TERM; echo $$ > "$1"; sleep 30 & wait', 'memos-test', pidFile], { timeoutMs: 100 });
-      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      pid = await readPidFile(pidFile, Date.now() + 2000);
       expect(result.signal).toBe('SIGKILL');
       expect(result).toMatchObject({ termination: 'unconfirmed', pgid: pid });
       const elapsed = Date.now() - started;
@@ -804,7 +805,7 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       expect(warnings[0]).toBe('warning: process group termination could not be confirmed after SIGKILL');
     } finally {
       kill.mockRestore(); stderr.mockRestore();
-      if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
+      if (!pid) try { pid = await readPidFile(pidFile, Date.now()); } catch { /* Cleanup must preserve the original failure. */ }
       if (pid) try { realKill(-pid, 'SIGKILL'); } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
       }
@@ -821,10 +822,8 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       .catch((error: unknown) => { rejected = true; launchError = error; return undefined; });
     try {
       const deadline = Date.now() + 2000;
-      while (!fs.existsSync(pidFile) && !rejected && Date.now() < deadline) await delay(10);
+      pid = (await readPidFile(pidFile, deadline, () => rejected))!;
       if (rejected) throw launchError;
-      expect(fs.existsSync(pidFile)).toBe(true);
-      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
       expect(pid).toBeGreaterThan(0);
       expect(() => process.kill(-pid!, 0)).not.toThrow();
       // Allow the shell to launch descendants before cancellation.
@@ -870,16 +869,12 @@ describe.skipIf(process.platform === 'win32')('runProcess', () => {
       .finally(() => { settled = true; });
     try {
       const deadline = Date.now() + 2000;
-      while (!fs.existsSync(pidFile) && !rejected && Date.now() < deadline) await delay(10);
+      pid = (await readPidFile(pidFile, deadline, () => rejected))!;
       if (rejected) throw launchError;
-      expect(fs.existsSync(pidFile)).toBe(true);
-      pid = Number(fs.readFileSync(pidFile, 'utf8').trim());
       expect(pid).toBeGreaterThan(0);
       expect(() => process.kill(-pid!, 0)).not.toThrow();
-      while (!fs.existsSync(grandchildPidFile) && !rejected && Date.now() < deadline) await delay(10);
+      const grandchildPid = (await readPidFile(grandchildPidFile, deadline, () => rejected))!;
       if (rejected) throw launchError;
-      expect(fs.existsSync(grandchildPidFile)).toBe(true);
-      const grandchildPid = Number(fs.readFileSync(grandchildPidFile, 'utf8').trim());
       expect(grandchildPid).toBeGreaterThan(0);
       expect(() => process.kill(grandchildPid, 0)).not.toThrow();
       await delay(100);

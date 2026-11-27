@@ -99,6 +99,7 @@ import type {
   AccessibilityCapture,
   BoundElement,
   BrowserSession,
+  GroundedResolution,
   UiExecutor,
   GroundingMissReason,
   PerformableAction,
@@ -3023,7 +3024,12 @@ async function groundedTarget(
   let storedMissReason: string | undefined;
   if (stored !== undefined) {
     await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
-    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }) });
+    const query = { mode: 'verify' as const, fingerprint: stored.fingerprint, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }) };
+    const verified = await pollUntilDeadline(context, deadlineMs, async () => {
+      const attempt = await session.resolveGrounded(stored.locator, query);
+      // Use type assertion because TypeScript cannot narrow the union across the conditional
+      return attempt.kind === 'hit' ? { done: true, value: attempt as GroundedResolution } : { done: false, last: attempt as GroundedResolution };
+    }) as GroundedResolution;
     if (verified.kind === 'hit') {
       context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, storedEntry: stored, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }), provenance: 'grounding' });
       context.resolvedVias.set(step.id, 'grounding');

@@ -523,15 +523,20 @@ describe('bootstrapAdmin', () => {
       // The passthrough spy retains native timeout signals until the request settles.
       // Node 22.14 otherwise allows composite sources to be garbage collected before aborting.
       const timeout = vi.spyOn(AbortSignal, 'timeout');
-      const start = Date.now();
+      let timeoutCalls: typeof timeout.mock.calls = [];
       const error = await bootstrapAdmin({ fetch, password }).catch((error: unknown) => error)
-        .finally(() => timeout.mockRestore());
+        .finally(() => {
+          // Restoring the spy clears its calls, so preserve them for the timeout assertion.
+          timeoutCalls = [...timeout.mock.calls];
+          timeout.mockRestore();
+        });
       expect(error).toBeInstanceOf(BootstrapError);
       expect(error.message).toBe(`${endpoint === 0 ? 'GET' : 'POST'} ${paths[endpoint]} -> network-error`);
       expect(error.message).not.toContain(password);
       expect(error.message).not.toContain('private-body');
       expect(fetch).toHaveBeenCalledTimes(endpoint + 1);
-      if (failure === 'timeout') expect(Date.now() - start).toBeGreaterThanOrEqual(5000);
+      // Native timers can fire slightly early, so check the requested delay rather than elapsed time.
+      if (failure === 'timeout') expect(timeoutCalls).toEqual(Array.from({ length: endpoint + 1 }, () => [5000]));
     }, 10_000,
   );
 });

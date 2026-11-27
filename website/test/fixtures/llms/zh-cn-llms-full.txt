@@ -693,7 +693,11 @@ import { Steps, LinkCard } from '@astrojs/starlight/components';
 
 3. ## 设置元素等待时间 \{#set-resolve-timeout}
 
-   在目标上添加 `"resolveTimeoutMs":<ms>`，可设置解析时等待元素出现的时长。默认值为 `5000`，可接受的范围为 `0` 到 `60000`。
+   在目标上添加 `"resolveTimeoutMs":<ms>`，可设置单个步骤中解析元素的截止时间，单位为毫秒，从步骤开始时计时。默认值为 `5000`，可接受的范围为 `0` 到 `60000`。
+
+   等待一次已保存的定位器出现、重新比对已保存的条目，以及首次绑定的轮询，共用这个截止时间。它决定是否开始下一次等待，并不限制快照、AI 调度和操作的耗时。
+
+   调大该值，步骤停止前的等待也会变长。取 `0` 时只比对一次。
 
 4. ## 允许机密的发送源 \{#allow-secret-origins}
 
@@ -1431,6 +1435,8 @@ ambercast 按下面的顺序选择文件：
 
 这个设置的作用到此为止。它不设置时区、应用侧的语言 Cookie 或应用侧的偏好，也不规定与这些机制之间的优先顺序。
 
+`resolveTimeoutMs` 是单个步骤中解析元素的截止时间，单位为毫秒，从步骤开始时计时。等待一次已保存的定位器出现、重新比对已保存的条目，以及首次绑定的轮询，共用这个截止时间。它决定是否开始下一次等待，并不限制快照、AI 调度和操作的耗时。
+
 ## 配置键列表 {#key-table}
 
 | 键路径 | 类型 | 默认值 | 约束 | 使用方 |
@@ -1479,6 +1485,8 @@ ambercast 按下面的顺序选择文件：
 ## heal 配置 {#heal}
 
 `heal.maxStepRepairs` 限制增量的真实提供方调度次数。`heal.caseTimeoutMs` 是整个用例的准入期限。
+
+heal 回放中的等待会计入 `heal.caseTimeoutMs`。`heal.caseTimeoutMs` 小于 `resolveTimeoutMs` 时，仅修复前回放的等待就可能超过准入期限，此后不会准入任何修复。
 
 ## 定位缓存回写 {#grounding}
 
@@ -2991,6 +2999,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 | 定位缓存未命中，未传入 `--resolve` | 无 | 以 `grounding-unresolved` 失败关闭（退出码 4） |
 | 定位缓存未命中，传入 `--resolve` | 解析器；`--ai` 可覆盖 | 实时 AI 解析并可能写回 |
 
+已保存的元素条目直到步骤截止时间仍不匹配，才算未命中。等待的方式和限制见[等待页面切换](/ambercast/zh-cn/explanation/replay-and-grounding/#stored-entry-wait)。
+
 运行时在加载配置或执行文件 I/O 之前，会直接拒绝 `--stale=regenerate`。
 
 运行时负责组装浏览器、由环境变量支持的机密、配置以及可供 `--resolve` 使用的提供商解析器。机密值仅在允许的浏览器接收端从 `AMBERCAST_SECRET_<NAME>` 解析；`run` 从不请求生成同意。
@@ -3035,7 +3045,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/reference/cli/run/
 
 ## 每次回放都变化的邻近文字 {#changing-neighbor-text}
 
-已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列，例如上一步引起的页面切换尚未完成。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
 
 v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
 
@@ -3651,7 +3661,9 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/steps/
 
 断言检查在观测失败后，以最多 100ms 的间隔轮询，直到步骤截止时间。`timeoutMs` 会覆盖目标的 `resolveTimeoutMs` 作为该截止时间；取值为零时仍会求值一次。
 
-轮询适用于首次绑定的第一阶段、执行计划中的断言，以及由 AI 指挥的断言工具。它也适用于轨迹回放的两种判定，即事件判定和验证判定。执行计划中的断言包括三种带引文元素的检查，以及 `text-visible` 和 `url-matches` 的浏览器检查路径。由 AI 指挥的断言工具和轨迹回放使用目标的 `resolveTimeoutMs`。这些位置在等待到达截止时间后，各自做最后一次观测，由这次观测决定结果。
+轮询适用于首次绑定的第一阶段、已保存元素条目的比对、执行计划中的断言，以及由 AI 指挥的断言工具。它也适用于轨迹回放的两种判定，即事件判定和验证判定。执行计划中的断言包括三种带引文元素的检查，以及 `text-visible` 和 `url-matches` 的浏览器检查路径。已保存元素条目的比对、由 AI 指挥的断言工具和轨迹回放使用目标的 `resolveTimeoutMs`。这些位置在等待到达截止时间后，各自做最后一次观测，由这次观测决定结果。
+
+单次等待已保存的定位器出现、重复比对已保存的元素条目，以及首次绑定，共用同一个步骤截止时间。截止时间从步骤开始时计时，在它们之间不会重新计时。
 
 `element-visible`、`text-equals` 和 `element-count` 从不查询或更新定位缓存，也不调用 AI：无论是否带 `--resolve`，它们都会轮询 `accessibilitySnapshot()` 和 `matchQuotedCandidates`，直到截止时间 (`src/usecases/run.ts:3071-3184`)。
 
@@ -4291,6 +4303,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
+| 带截止时间的轮询也适用于已保存元素条目的比对。出现未命中后，ambercast 以最多 100ms 的间隔重新比对，直到条目匹配或步骤截止时间已过，因此页面仍在切换时回放不再停止。定位缓存、执行计划、报告和配置的格式不变。 | `repo:src/usecases/run.ts` | 无需迁移。依赖已保存条目未命中后立即停止的测试，需要预留最长 `resolveTimeoutMs` 的等待。 |
 | report 3.12 → 3.13 新增步骤 `binding.ignoredNames`、`neighbor-name-ignored` 警告，以及 recoverable-miss 的 `verification`、`difference` 和 `changedNames`。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。 |
 | 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。跨次回放可使用已保存的邻近名称忽略槽位；同次回放的操作仍由完整指纹保护。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
 | report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
@@ -4416,6 +4429,8 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 - 可恢复的未命中且带 `--resolve`：实时解析。
 - 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
 
+元素条目直到步骤截止时间仍不匹配，才算未命中。详见[等待页面切换](#stored-entry-wait)。
+
 相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
 ## 定位缓存命中时 {#grounding-hit}
@@ -4450,9 +4465,27 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
+## 等待页面切换 {#stored-entry-wait}
+
+已保存的元素条目与当前页面不一致时，ambercast 不会因为第一次比对失败就判定为未命中。出现不一致后，它最多等待 100 ms，然后重新比对，直到条目匹配或步骤截止时间已过。比对本身另外耗时。
+
+截止时间是步骤开始时刻加上目标的 `resolveTimeoutMs`。上一步的操作仍在切换页面时，只要页面切换完成后条目能够匹配，该步骤仍无需调用 AI 即可继续回放。
+
+等待不会改变匹配的判定标准。ambercast 沿用不等待时的同一套规则，包括已保存的忽略槽位，并且不会操作不匹配的元素。
+
+到截止时间条目仍不匹配，该步骤即为未命中。不带 `--resolve` 时，回放以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。带 `--resolve` 时，ambercast 实时解析该元素。
+
+因此，页面确实已经变化的步骤，也会先等完截止时间的剩余部分，再停止或重新解析。调大 `resolveTimeoutMs` 会延长这段等待，上限为 `60000`。取 `0` 时只比对一次。
+
+这里有两个限制。第一，指纹按 role 和名称覆盖目标、它的父元素和相邻的兄弟元素。指纹不标识页面，也不标识记录。
+
+等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之后断言只有新页面才有的内容。
+
+第二，页面切换晚于截止时间时，不带 `--resolve` 的回放会停止，请调大该目标的 `resolveTimeoutMs`。带 `--resolve` 时，ambercast 按截止时间那一刻的页面重新解析，而那一刻的页面可能仍是正在离开的页面。
+
 ## 每次回放都变化的邻近文字 {#changing-neighbor-text}
 
-已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列，例如上一步引起的页面切换尚未完成。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
 
 v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
 

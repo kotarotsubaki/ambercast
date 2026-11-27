@@ -693,7 +693,11 @@ A configuration file that exists must contain a string `$schema`. To see a `list
 
 3. ## Set the element wait \{#set-resolve-timeout}
 
-   Add `"resolveTimeoutMs":<ms>` to a target to set how long resolution waits for an element to be present. The default is `5000`, and the accepted range is `0` to `60000`.
+   Add `"resolveTimeoutMs":<ms>` to a target to set the deadline, in milliseconds, for resolving an element in one step. The deadline counts from the step start. The default is `5000`, and the accepted range is `0` to `60000`.
+
+   Waiting once for the stored locator to be present, re-checking a stored entry, and first-binding polling share this deadline. It decides whether ambercast starts another wait; it does not cap a snapshot, an AI dispatch, or the operation.
+
+   A larger value also lengthens the wait before a step stops. With `0`, ambercast checks once.
 
 4. ## Allow secret origins \{#allow-secret-origins}
 
@@ -1431,6 +1435,8 @@ The normalized locale reaches the plan's target definition and the Playwright br
 
 The setting stops there. It does not set the timezone, an application-side language cookie, or an application preference. It also defines no priority against those mechanisms.
 
+`resolveTimeoutMs` is the deadline in milliseconds for resolving an element in one step, counted from the step start. Waiting once for the stored locator to be present, re-checking a stored entry, and first-binding polling share it. It decides whether ambercast starts another wait; it does not cap a snapshot, an AI dispatch, or the operation.
+
 ## Key table {#key-table}
 
 | key path | type | default | constraint | consumers |
@@ -1479,6 +1485,8 @@ The `testMatch` and `testIgnore` patterns follow the [pattern language](/amberca
 ## Healing configuration {#heal}
 
 `heal.maxStepRepairs` caps incremental real-provider dispatches. `heal.caseTimeoutMs` is the admission deadline for the whole case.
+
+Waiting inside heal's replays counts toward `heal.caseTimeoutMs`. If `heal.caseTimeoutMs` is smaller than `resolveTimeoutMs`, the baseline replay's wait alone can pass the admission deadline, and then no repair is admitted.
 
 ## Grounding write-back {#grounding}
 
@@ -2976,6 +2984,8 @@ See [Resolve missing grounding](#resolve) for `--resolve` and `--ai`, [Grounding
 | grounding miss, `--resolve` omitted | none | fails closed as `grounding-unresolved` (exit 4) |
 | grounding miss, `--resolve` passed | resolver; `--ai` overrides | live AI resolution and possible write-back |
 
+A stored element entry counts as a miss only if it still does not match at the step deadline. [Waiting for a page to change](/ambercast/explanation/replay-and-grounding/#stored-entry-wait) describes the wait and its limits.
+
 The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, environment-backed secrets, configuration, and the provider resolver that `--resolve` can use. Secret values resolve only from `AMBERCAST_SECRET_<NAME>` at a permitted browser sink; `run` never requests generation consent.
 
 ## AI calls {#ai-calls}
@@ -3018,7 +3028,7 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
 Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
-This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
+This covers only that cause: a stop from another cause can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.
@@ -3640,7 +3650,9 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 
 Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once.
 
-Polling applies to the first stage of first binding, to plan assertions, and to the AI-directed assert tool. It also applies to the two trace replay judgments, one for events and one for verification. Plan assertions cover the three quoted-element checks and the `text-visible` and `url-matches` browser-check path. The AI-directed assert tool and trace replay use the Target's `resolveTimeoutMs`. Each of these makes one final observation after a wait that reaches the deadline, and that observation determines the result.
+Polling applies to the first stage of first binding, to the check of a stored element entry, to plan assertions, and to the AI-directed assert tool. It also applies to the two trace replay judgments, one for events and one for verification. Plan assertions cover the three quoted-element checks and the `text-visible` and `url-matches` browser-check path. The check of a stored element entry, the AI-directed assert tool, and trace replay use the Target's `resolveTimeoutMs`. Each of these makes one final observation after a wait that reaches the deadline, and that observation determines the result.
+
+The single wait for the stored locator to be present, the repeated check of a stored element entry, and first binding share one step deadline. The deadline counts from the step start, and ambercast never restarts it between them.
 
 `element-visible`, `text-equals`, and `element-count` never consult or update grounding or call AI: with or without `--resolve`, they poll `accessibilitySnapshot()` and `matchQuotedCandidates` until their deadline. [src/usecases/run.ts:3071-3184](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/usecases/run.ts#L3071-L3184)
 
@@ -4272,6 +4284,7 @@ Source: https://kotarotsubaki.github.io/ambercast/spec/changelog/
 
 | Change | Evidence | Migration obligation |
 | --- | --- | --- |
+| Deadline-bearing polling also applies to the check of a stored element entry. After a miss, ambercast checks again at intervals of at most 100ms until the entry matches or the step deadline passes, so a replay no longer stops while the page is still changing. The grounding, plan, report, and configuration formats are unchanged. | `repo:src/usecases/run.ts` | No migration required. A test that relies on a stored-entry miss stopping at once must allow a wait of up to `resolveTimeoutMs`. |
 | report 3.12 → 3.13 adds step `binding.ignoredNames`, `neighbor-name-ignored` warnings, and recoverable-miss `verification`, `difference`, and `changedNames`. | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | Stored reports from 3.12 and earlier remain readable without filling in new fields. New output and the published schema accept only 3.13. |
 | Grounding v4 → v5 adds optional `components` and `ignoredNames` to element entries. Cross-run matching can exclude saved neighbor-name slots; the complete fingerprint still protects actions within a run. | `repo:src/core/ir/schema.ts`, `repo:src/core/ir/fingerprint.ts` | No regeneration is required: v4 remains readable. New document writes use v5; a run without changes leaves the file untouched. The v5 schema accepts only v5; the v4 schema remains frozen. Older ambercast versions cannot read v5; on rollback, regenerate grounding with `ambercast run --resolve --update-cache`. |
 | report 3.11 → 3.12 adds optional `replayReadiness`. | `[src/report/schema.ts:58](https://github.com/kotarotsubaki/ambercast/blob/v0.10.0/src/report/schema.ts#L58)` | Older reports remain readable without this field. Plan 5 and Grounding 4 are unchanged; no regeneration is required. |
@@ -4397,6 +4410,8 @@ Replay then follows one of four paths:
 - A recoverable miss with `--resolve` is resolved live.
 - A recoverable miss without `--resolve` stops with `GROUNDING_UNRESOLVED` (exit 4).
 
+An element entry counts as a miss only if it still does not match at the step deadline. See [Waiting for a page to change](#stored-entry-wait).
+
 Related: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
 
 ## When grounding hits {#grounding-hit}
@@ -4431,11 +4446,29 @@ An element miss fails closed in the same way, with exit 4, instead of resolving 
 
 Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
 
+## Waiting for a page to change {#stored-entry-wait}
+
+When a stored element entry does not match the page, ambercast does not treat the first failed check as a miss. After a miss it waits at most 100 ms and checks again, until the entry matches or the step deadline passes. The check itself takes additional time.
+
+The deadline is the step start plus the target's `resolveTimeoutMs`. So a step still replays without an AI call while the previous step's action is still changing the page, provided the entry matches once the page has changed.
+
+Waiting does not change what counts as a match. ambercast applies the same matching rule as without waiting, including any saved ignored slots, and never acts on an element that does not match.
+
+If the entry still does not match at the deadline, the step is a miss. Without `--resolve` it stops with `GROUNDING_UNRESOLVED` (exit 4), and with `--resolve` ambercast resolves the element live.
+
+A step whose page really changed therefore also waits for the rest of the deadline before it stops or re-resolves. A larger `resolveTimeoutMs`, up to `60000`, lengthens that wait. With `0`, ambercast checks once.
+
+Two limits apply. First, the fingerprint covers the target, its parent, and its adjacent siblings by role and name. It does not identify the page or the record.
+
+If the page being left shows the same roles and names around a same-named element while ambercast waits, that element matches and ambercast acts on it. When this matters, assert something that only the new page shows after the action.
+
+Second, a page that changes later than the deadline stops a replay without `--resolve`; raise `resolveTimeoutMs` for that target. With `--resolve`, ambercast re-resolves from the page as it is at the deadline, which can still be the page being left.
+
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
 Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
-This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
+This covers only that cause: a stop from another cause can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.

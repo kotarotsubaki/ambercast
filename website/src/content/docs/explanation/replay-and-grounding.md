@@ -20,6 +20,8 @@ Replay then follows one of four paths:
 - A recoverable miss with `--resolve` is resolved live.
 - A recoverable miss without `--resolve` stops with `GROUNDING_UNRESOLVED` (exit 4).
 
+An element entry counts as a miss only if it still does not match at the step deadline. See [Waiting for a page to change](#stored-entry-wait).
+
 Related: [Grounding document](/ambercast/spec/grounding-document/), [Element fingerprint](/ambercast/spec/fingerprint/), [ambercast run](/ambercast/reference/cli/run/#ai-calls)
 
 ## When grounding hits {#grounding-hit}
@@ -54,11 +56,29 @@ An element miss fails closed in the same way, with exit 4, instead of resolving 
 
 Related: [ambercast run](/ambercast/reference/cli/run/#resolve), [Reading structured output](/ambercast/agents/reading-structured-output/#decision-tree)
 
+## Waiting for a page to change {#stored-entry-wait}
+
+When a stored element entry does not match the page, ambercast does not treat the first failed check as a miss. After a miss it waits at most 100 ms and checks again, until the entry matches or the step deadline passes. The check itself takes additional time.
+
+The deadline is the step start plus the target's `resolveTimeoutMs`. So a step still replays without an AI call while the previous step's action is still changing the page, provided the entry matches once the page has changed.
+
+Waiting does not change what counts as a match. ambercast applies the same matching rule as without waiting, including any saved ignored slots, and never acts on an element that does not match.
+
+If the entry still does not match at the deadline, the step is a miss. Without `--resolve` it stops with `GROUNDING_UNRESOLVED` (exit 4), and with `--resolve` ambercast resolves the element live.
+
+A step whose page really changed therefore also waits for the rest of the deadline before it stops or re-resolves. A larger `resolveTimeoutMs`, up to `60000`, lengthens that wait. With `0`, ambercast checks once.
+
+Two limits apply. First, the fingerprint covers the target, its parent, and its adjacent siblings by role and name. It does not identify the page or the record.
+
+If the page being left shows the same roles and names around a same-named element while ambercast waits, that element matches and ambercast acts on it. When this matters, assert something that only the new page shows after the action.
+
+Second, a page that changes later than the deadline stops a replay without `--resolve`; raise `resolveTimeoutMs` for that target. With `--resolve`, ambercast re-resolves from the page as it is at the deadline, which can still be the page being left.
+
 ## Text that changes between runs {#changing-neighbor-text}
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
 Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
-This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
+This covers only that cause: a stop from another cause can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.

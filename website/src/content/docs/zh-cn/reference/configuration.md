@@ -30,6 +30,8 @@ ambercast 按下面的顺序选择文件：
 
 这个设置的作用到此为止。它不设置时区、应用侧的语言 Cookie 或应用侧的偏好，也不规定与这些机制之间的优先顺序。
 
+`resolveTimeoutMs` 是单个步骤中解析元素的截止时间，单位为毫秒，从步骤开始时计时。等待一次已保存的定位器出现、重新比对已保存的条目，以及首次绑定的轮询，共用这个截止时间。它决定是否开始下一次等待，并不限制快照、AI 调度和操作的耗时。
+
 ## 配置键列表 {#key-table}
 
 | 键路径 | 类型 | 默认值 | 约束 | 使用方 |
@@ -78,6 +80,8 @@ ambercast 按下面的顺序选择文件：
 ## heal 配置 {#heal}
 
 `heal.maxStepRepairs` 限制增量的真实提供方调度次数。`heal.caseTimeoutMs` 是整个用例的准入期限。
+
+heal 回放中的等待会计入 `heal.caseTimeoutMs`。`heal.caseTimeoutMs` 小于 `resolveTimeoutMs` 时，仅修复前回放的等待就可能超过准入期限，此后不会准入任何修复。
 
 ## 定位缓存回写 {#grounding}
 

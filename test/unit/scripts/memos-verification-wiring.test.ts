@@ -19,6 +19,14 @@ const expectedCases = [
   { id: 'memos-settings-dialog', target: 'memos-readonly' },
   { id: 'memos-ja-locale', target: 'memos-ja' },
 ];
+const expectedReplayIds = [
+  'memos-sign-in-create-memo',
+  'memos-delete-memo',
+  'memos-search-memos',
+  'memos-tag-filter',
+  'memos-settings-dialog',
+  'memos-ja-locale',
+];
 const planSuffixes = ['.ambercast.plan.json', '.ambercast.grounding.json'];
 /**
  * Describes a fixture directory whose generated artifacts do not form per-case
@@ -38,13 +46,21 @@ function fixturePairProblems(dir: URL, marked: readonly string[] = []): string[]
 }
 const markedIds = ((await harnessExports()).CASES as { id: string; knownIssue?: number }[])
   .filter(c => c.knownIssue !== undefined).map(c => c.id);
-const pairPresent = (id: string) => planSuffixes.every(suffix => existsSync(new URL(`tests/ambercast/${id}${suffix}`, fixture)));
-// A case without its generated pair is skipped, except the sign-in smoke whose
-// pair stays required; handwritten IR cannot substitute for generation.
-const skipCase = (id: string) => !pairPresent(id) && (id !== 'memos-sign-in-create-memo' || markedIds.includes(id));
 describe('committed Memos replay readiness', () => {
-  for (const { id } of expectedCases) {
-    it.skipIf(skipCase(id))(`TEST-READY-6 has usable replay entries for ${id}`, () => {
+  it('TEST-HARNESS-3 registers seven cases and selects six with only edit-memo marked #722', async () => {
+    const { CASES, parseArgs } = await harnessExports();
+    expect((CASES as { id: string; target: string }[]).map(({ id, target }) => ({ id, target }))).toEqual(expectedCases);
+    expect((CASES as { id: string; target: string; knownIssue?: number }[])
+      .filter(c => c.knownIssue !== undefined)).toEqual([
+      { id: 'memos-edit-memo', target: 'memos', knownIssue: 722 },
+    ]);
+    expect((parseArgs as (args: string[]) => { cases: string[] })([]).cases).toEqual(expectedReplayIds);
+  });
+  for (const id of expectedReplayIds) {
+    it(`TEST-HARNESS-3 has a generated pair and usable replay entries for ${id}`, () => {
+      for (const suffix of planSuffixes) {
+        expect(existsSync(new URL(`tests/ambercast/${id}${suffix}`, fixture)), `${id}${suffix} is required`).toBe(true);
+      }
       const plan = PlanDocument.parse(JSON.parse(fixtureText(`tests/ambercast/${id}.ambercast.plan.json`)));
       const readiness = assessReplayReadiness(plan, {
         kind: 'text', text: fixtureText(`tests/ambercast/${id}.ambercast.grounding.json`),
@@ -52,6 +68,12 @@ describe('committed Memos replay readiness', () => {
       expect(readiness.status, `${id}: ${JSON.stringify(readiness)}`).toBe('ready');
     });
   }
+  it('TEST-HARNESS-3 leaves edit-memo without a plan or grounding', () => {
+    // Issue #722 covers the navigation-timing stop outside this change.
+    for (const suffix of planSuffixes) {
+      expect(existsSync(new URL(`tests/ambercast/memos-edit-memo${suffix}`, fixture))).toBe(false);
+    }
+  });
 });
 describe('regeneration documentation', () => {
   it('TEST-HARNESS-2 omits the pre-resolve confirms coverage check', () => {
@@ -261,8 +283,8 @@ describe('memos verification wiring', () => {
     expect(existsSync(file), file.pathname).toBe(true);
   });
 
-  for (const { id } of expectedCases) {
-    it.skipIf(skipCase(id))(`TEST-544-4 commits plan and grounding for ${id}`, () => {
+  for (const id of expectedReplayIds) {
+    it(`TEST-544-4 commits plan and grounding for ${id}`, () => {
       for (const suffix of ['.ambercast.plan.json', '.ambercast.grounding.json']) {
         const file = new URL(`tests/ambercast/${id}${suffix}`, fixture);
         expect.soft(existsSync(file), file.pathname).toBe(true);
@@ -339,13 +361,13 @@ describe('memos verification wiring', () => {
     expect(config.heal.maxStepRepairs).toBe(2);
   });
 
-  for (const { id, target } of expectedCases) {
-    it.skipIf(skipCase(id))(`TEST-544-5 uses only target ${target} in the plan for ${id}`, () => {
+  for (const { id, target } of expectedCases.filter(c => expectedReplayIds.includes(c.id))) {
+    it(`TEST-544-5 uses only target ${target} in the plan for ${id}`, () => {
       expect([...new Set(fixturePlan(id).steps.map(step => step.target))]).toEqual([target]);
     });
   }
 
-  it.skipIf(!pairPresent('memos-settings-dialog'))('TEST-544-5 limits settings-dialog inputs to the username and allowed password', () => {
+  it('TEST-544-5 limits settings-dialog inputs to the username and allowed password', () => {
     const config = JSON.parse(fixtureText('ambercast.config.json'));
     expect(config.secrets.allow).toHaveLength(1);
     const inputs = fixturePlan('memos-settings-dialog').steps
@@ -358,7 +380,7 @@ describe('memos verification wiring', () => {
       .toBe(`{{secrets.${config.secrets.allow[0]}}}`);
   });
 
-  it.skipIf(!pairPresent('memos-settings-dialog'))('TEST-544-5 identifies exactly one unquoted settings-entry click by HEAL_STEP_ID', async () => {
+  it('TEST-544-5 identifies exactly one unquoted settings-entry click by HEAL_STEP_ID', async () => {
     const { HEAL_STEP_ID } = await harnessExports();
     expect(HEAL_STEP_ID).toBeTypeOf('string');
     expect(HEAL_STEP_ID).not.toBe('');

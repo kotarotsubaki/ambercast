@@ -43,7 +43,7 @@ const CONFIG = 'ambercast.config.json';
  */
 export const CASES = Object.freeze([
   { id: 'memos-sign-in-create-memo', target: 'memos' },
-  { id: 'memos-edit-memo', target: 'memos', knownIssue: 632 },
+  { id: 'memos-edit-memo', target: 'memos', knownIssue: 722 },
   { id: 'memos-delete-memo', target: 'memos' },
   { id: 'memos-search-memos', target: 'memos' },
   { id: 'memos-tag-filter', target: 'memos' },
@@ -231,6 +231,10 @@ export function parseArgs(argv) {
  * after generating keeps the candidate plan outside the run root so resolve can be
  * retried with `--plan` without paying for another generation.
  *
+ * A target without stored grounding first acquires a strict entry. One additional
+ * resolve compares it with a fresh observation when replay finds changed neighbor
+ * names. The single retry bounds AI spending and prevents hiding instability.
+ *
  * Fixture copying and retention of the original heal plan/cache share one lock,
  * making the retained bytes the restoration authority even if fixtures change
  * later. Cases share a sequential run; acceptance does not establish independent
@@ -277,6 +281,7 @@ export async function main(argv, platform = process.platform, deps = createDeps(
   let currentStage = 'preflight', signalStage, sigExit = null, publishing = false, publishAttempted = false;
   let root, password, secretName, manifest, manifestPath, failure, containerRegistered = false;
   let aiCalls = 'n/a';
+  let reresolved = false, dataResetCount = 0;
   let token, snapshot, originalHealFiles, restoreNeeded = false, restoreAttempted = false, restoreFailed;
   const tokens = new Set();
   let healAiCalls = 0;
@@ -764,21 +769,31 @@ export async function main(argv, platform = process.platform, deps = createDeps(
       }
       password = generateAdminPassword(deps.randomBytes);
       await startInstance();
-      if (options.regenerate) {
+      async function resolveBindings(retry = false) {
+        // Both attempts enforce the same postconditions so a retry cannot silently
+        // repair context fixtures that this one-case regeneration cannot publish.
         await step('replay', async () => {
+          if (retry) {
+            err(`verify-memos: re-resolving ${only.id}: the text next to an element differed from the stored grounding\n`);
+            reresolved = true;
+          }
           const result = await child(ambercast(), ['run', '--resolve', '--update-cache', '--json', ...allPrompts,
             ...(options.ai ? ['--ai', options.ai] : [])], root.projectDir, TIMEOUTS.resolve * selected.length, secrets(), {
               stdio: 'resolve', password, onStderrChunk: chunk => err(chunk),
             });
           let resolved;
           try { resolved = JSON.parse(result.stdout); } catch { resolved = undefined; }
-          // A failed resolve still leaves its report: the step that failed is the evidence for the retry.
-          if (only && resolved !== undefined) fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
+          // Preserve the latest diagnostic evidence even when resolve fails or emits invalid JSON.
+          if (only) fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
           requireSuccess(result);
           if (resolved === undefined) throw new Error('non-json stdout');
           if (!only) fs.writeFileSync(join(root.runRoot, 'resolve-report.json'), result.stdout);
           assertResolvedBindings(resolved, allPrompts);
           if (only) assertContextUntouched(resolved);
+        }, false);
+      }
+      async function resetInstance() {
+        await step('replay', async () => {
           await deps.runner.removeContainer(root.containerName, dockerOptions());
           interrupted();
           // Deleting and immediately re-mounting the same host bind-mount
@@ -787,7 +802,11 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           // a fresh path instead. Exclusive creation (no {recursive: true})
           // fails instead of silently reusing a leftover data-reset/ left by
           // an earlier, aborted reset.
-          const resetDataDir = join(root.runRoot, 'data-reset');
+          // This reset procedure also separates the failed replay from the
+          // additional resolve, and that resolve from its AI-free replay. Each
+          // reset needs a new directory name and exclusive creation; reusing a
+          // name would defeat both the filesystem isolation and stale-data guard.
+          const resetDataDir = join(root.runRoot, dataResetCount++ === 0 ? 'data-reset' : `data-reset-${dataResetCount}`);
           fs.mkdirSync(resetDataDir);
           fs.rmSync(root.dataDir, { recursive: true, force: true });
           root.dataDir = resetDataDir;
@@ -795,7 +814,13 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         }, false);
         await startInstance();
       }
-      await step('replay', async () => {
+      if (options.regenerate) {
+        await resolveBindings();
+        await resetInstance();
+      }
+      for (;;) {
+        let retry = false;
+        await step('replay', async () => {
         const result = await child(ambercast(), ['run', '--json', '--no-color', ...allPrompts], root.projectDir, TIMEOUTS.replay * selected.length, secrets());
         if (result.status === null) throw new Error(exitReason(result));
         let report;
@@ -805,6 +830,19 @@ export async function main(argv, platform = process.platform, deps = createDeps(
         }
         try { aiCalls = summarizeAiCalls(report); } catch { aiCalls = 'unknown'; }
         fs.writeFileSync(join(root.runRoot, 'report.json'), result.stdout);
+        // Report identities associate errors with results; fixture names only select
+        // the target row. Healthy context and no run error distinguish a second
+        // observation from broken prerequisites. Resolve spending never replaces
+        // the last AI-free replay's acceptance count.
+        const target = only && Array.isArray(report?.results) ? report.results.find(row => row?.file === prompt(only.id)) : undefined;
+        if (options.regenerate && only && !reresolved && target && target.status !== 'passed'
+          && context.every(c => report.results.find(row => row?.file === prompt(c.id))?.status === 'passed')
+          && Array.isArray(report.errors) && !report.errors.some(error => error?.scope === 'run')
+          && report.errors.some(error => error?.scope === 'case' && error.caseId === target.id
+            && error.code === 'GROUNDING_UNRESOLVED' && error.details?.difference === 'neighbor-names')) {
+          retry = true;
+          return;
+        }
         if (result.status !== 0) {
           const first = Array.isArray(report?.errors) ? report.errors[0] : undefined;
           const row = Array.isArray(report?.results) ? report.results.find(row => row?.status !== 'passed') : undefined;
@@ -821,7 +859,12 @@ export async function main(argv, platform = process.platform, deps = createDeps(
           }
           throw new Error(reason);
         }
-      });
+        });
+        if (!retry) break;
+        await resetInstance();
+        await resolveBindings(true);
+        await resetInstance();
+      }
       await step('judge', () => judge('full'));
       if (options.healCheck) await step('heal', healCheck);
       if (options.regenerate) {
@@ -955,6 +998,11 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     }
   }
   if (failure) {
+    // Once the additional resolve launches, every final outcome carries exactly
+    // one reresolved=<case id>. On FAIL it follows aiCalls immediately, so even a
+    // failed resolve exposes the attempted retry without counting its AI calls
+    // as replay calls. Failure retention still preserves only the candidate plan
+    // outside the run root; the retry does not add persistent failure artifacts.
     const reasonBody = message(failure);
     const tail = (failure.publishedFiles ? `; published files: ${failure.publishedFiles.length} of ${PUBLISH_FILES.length}` : '')
       + (published.length ? `; fixture updated: ${published.length} of ${PUBLISH_FILES.length}` : '')
@@ -966,16 +1014,18 @@ export async function main(argv, platform = process.platform, deps = createDeps(
     const candidate = fullyPublished ? undefined : candidatePath ?? (planInUse ? resolve(process.cwd(), options.plan) : undefined);
     if (candidate) err(`verify-memos: candidate plan: ${candidate}; retry resolve with --regenerate --case ${only.id} --plan ${candidate}\n`);
     if (options.clean) err(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
-    else out(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}\n`);
+    else out(`verify-memos: FAIL stage=${failure.stage} reason=${reason} aiCalls=${aiCalls}${reresolved ? ` reresolved=${only.id}` : ''}\n`);
     return sigExit ?? 1;
   }
   if (publishAttempted) err(`verify-memos: published files: ${published.join(', ') || 'none'}\n`);
   if (fullyPublished) publishedNotices();
   // A pass that covers fewer cases than the default selection must not read as a
   // whole-set pass, and marked cases are named every time because they are never
-  // verified. Order is fixed: cases, known, regenerated, heal tail.
+  // verified. Order is fixed: cases, known, regenerated, reresolved, heal tail.
+  // On PASS-PARTIAL, the retry marker follows regenerated immediately and appears
+  // only when the additional resolve launched, regardless of its later outcome.
   const partial = only !== undefined || selected.length !== CASES.length - marked.length;
-  const tail = `${partial && !only ? ` cases=${selected.map(c => c.id).join(',')}` : ''}${marked.length ? ` known=${marked.map(c => `${c.id}#${c.knownIssue}`).join(',')}` : ''}${only ? ` regenerated=${only.id}` : ''}`;
+  const tail = `${partial && !only ? ` cases=${selected.map(c => c.id).join(',')}` : ''}${marked.length ? ` known=${marked.map(c => `${c.id}#${c.knownIssue}`).join(',')}` : ''}${only ? ` regenerated=${only.id}` : ''}${reresolved ? ` reresolved=${only.id}` : ''}`;
   if (!options.clean) out(`verify-memos: ${partial ? 'PASS-PARTIAL' : 'PASS'} aiCalls=${aiCalls} ${options.published ? `package=ambercast@${options.published}` : `sha=${manifest.sha.slice(0, 12)}${manifest.dirty ? '-dirty' : ''}`} memos=${MEMOS_VERSION}${tail}${options.healCheck ? ` heal=healed healAiCalls=${healAiCalls}` : ''}\n`);
   return 0;
 }

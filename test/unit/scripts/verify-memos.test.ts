@@ -1002,6 +1002,225 @@ function writeCandidate(f: Fake, text: string) {
 const missingGroundingCheck = (call: ProcessCall, out: ProcessResult) => call.kind === 'check' && call.argv.slice(3).join() === prompts[oneIdx]
   ? result(4, JSON.stringify({ results: [{ file: prompts[oneIdx], status: 'missing-grounding' }] })) : out;
 
+describe('neighbor-name regeneration retry', () => {
+  const selected = prompts.slice(0, oneIdx + 1);
+  const retryNotice = `verify-memos: re-resolving ${oneId}: the text next to an element differed from the stored grounding\n`;
+  function stoppedReport(file = prompts[oneIdx]!, difference = 'neighbor-names', aiCalls = 0) {
+    const envelope = suiteReport(selected, aiCalls);
+    const row = envelope.results.find(entry => entry.file === file)!;
+    // File paths select rows, but error association must use the report identity.
+    row.id = `case:${file}`;
+    row.status = 'error';
+    envelope.summary = { total: selected.length, passed: selected.length - 1, failed: 0, errored: 1, skipped: 0 };
+    envelope.errors.push({ code: 'GROUNDING_UNRESOLVED', scope: 'case', kind: 'usage', caseId: row.id,
+      message: 'Stored grounding needs resolution', details: { stepId: 'editor', reason: 'recoverable-miss',
+        verification: 'fingerprint-mismatch', difference, ...(difference === 'neighbor-names' ? { changedNames: ['siblingBefore'] } : {}) } });
+    ReportEnvelope.parse(envelope);
+    return envelope;
+  }
+  function retryFake(options: { first?: ReturnType<typeof suiteReport>; second?: ReturnType<typeof suiteReport>;
+    resolveFailure?: boolean; resolveText?: string; judgeFailure?: boolean;
+    contextChange?: 'plan' | 'grounding' | 'binding' | 'aiCalls'; unconfirmed?: boolean } = {}) {
+    const f = oneFake((call, out, resolved) => {
+      if (call.kind === 'resolve' || call.kind === 'replay') {
+        fs.writeFileSync(join(f.starts.at(-1)!.data, 'previous-attempt'), call.kind);
+      }
+      if (call.kind === 'resolve' && f.calls('resolve').length === 2) {
+        expect(f.stderr.at(-1)).toBe(retryNotice);
+        if (resolved) resolved.results.at(-1)!.aiCalls = 12;
+        if (options.resolveText !== undefined) return result(0, options.resolveText);
+        if (options.resolveFailure) return result(1, JSON.stringify(resolved));
+        if (options.contextChange === 'plan' || options.contextChange === 'grounding') {
+          const path = join(call.opts.cwd, options.contextChange === 'plan' ? plans[0]! : groundings[0]!);
+          write(path, fs.readFileSync(path, 'utf8') + '\n');
+        }
+        if (resolved && (options.contextChange === 'binding' || options.contextChange === 'aiCalls')) {
+          resolved.results[0]!.aiCalls = options.contextChange === 'aiCalls' ? 1 : 0;
+          resolved.results[0]!.steps = [{ id: 'context-action', status: 'passed', binding: {
+            provenance: options.contextChange === 'binding' ? 'quoted-match' : 'grounding', confirmed: true } }];
+        }
+        if (resolved && options.unconfirmed) resolved.results.at(-1)!.steps = [
+          { id: 'editor', status: 'passed', binding: { provenance: 'ai-proposed', confirmed: false } },
+        ];
+        return result(0, JSON.stringify(resolved));
+      }
+      if (call.kind === 'replay') {
+        const envelope = f.calls('replay').length === 1 ? options.first ?? stoppedReport() : options.second ?? suiteReport(selected);
+        return result(envelope.results.every(row => row.status === 'passed') && !envelope.errors.length ? 0 : 4, JSON.stringify(envelope));
+      }
+      if (call.kind === 'judge' && options.judgeFailure) return result(1, '', 'judge failed');
+      return out;
+    });
+    return f;
+  }
+
+  it('TEST-HARNESS-1 retries once in the same project, preserves command policy, judges and publishes the target', async () => {
+    const f = retryFake({ first: stoppedReport(undefined, undefined, 1) });
+    expect(await run(f, [...oneArgv, '--keep'])).toBe(0);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(2);
+    expect(f.calls('generate')).toHaveLength(1);
+    const [initial, repeated] = f.calls('resolve');
+    expect(repeated!.argv).toEqual(initial!.argv);
+    expect(repeated!.opts.cwd).toBe(initial!.opts.cwd);
+    expect(f.calls('replay').map(call => call.opts.cwd)).toEqual([initial!.opts.cwd, initial!.opts.cwd]);
+    expect(f.calls('replay')[1]!.argv).toEqual(f.calls('replay')[0]!.argv);
+    expect(f.calls('replay').every(call => !call.argv.includes('--resolve'))).toBe(true);
+    expect(f.stderr.filter(line => line === retryNotice)).toEqual([retryNotice]);
+    expect(last(f)).toContain(`regenerated=${oneId} reresolved=${oneId}`);
+    expect(last(f).match(/reresolved=/g)).toHaveLength(1);
+    expect(last(f)).toContain('PASS-PARTIAL');
+    expect(last(f)).toContain('aiCalls=0');
+    expect(f.calls('judge')).toHaveLength(1);
+    expect(publishedRenames(f).sort()).toEqual([plans[oneIdx], groundings[oneIdx]].sort());
+    const runRoot = dirname(initial!.opts.cwd);
+    expect(JSON.parse(fs.readFileSync(join(runRoot, 'report.json'), 'utf8'))).toEqual(suiteReport(selected));
+    const resolved = JSON.parse(fs.readFileSync(join(runRoot, 'resolve-report.json'), 'utf8')) as ResolveEnvelope;
+    expect(resolved.results.at(-1)!.aiCalls).toBe(12);
+  });
+
+  it('TEST-HARNESS-1 stops after a second neighbor miss and reports the last replay count', async () => {
+    const f = retryFake({ first: stoppedReport(undefined, undefined, 1), second: stoppedReport(undefined, undefined, 2) });
+    expect(await run(f, [...oneArgv, '--keep'])).toBe(1);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(2);
+    expect(last(f)).toContain('FAIL stage=replay');
+    expect(last(f)).toMatch(new RegExp(`aiCalls=6 reresolved=${oneId}(?: |$)`));
+    expect(last(f).match(/reresolved=/g)).toHaveLength(1);
+    expect(f.stderr.filter(line => line === retryNotice)).toHaveLength(1);
+    expect(publishedRenames(f)).toEqual([]);
+    const project = f.calls('resolve')[0]!.opts.cwd;
+    const runRoot = dirname(project);
+    expect(JSON.parse(fs.readFileSync(join(runRoot, 'report.json'), 'utf8'))).toEqual(stoppedReport(undefined, undefined, 2));
+  });
+
+  it.each(['other reason', 'context miss', 'failed context and target miss', 'error context and target miss',
+    'skipped context and target miss', 'run error', 'wrong case id', 'wrong code', 'wrong scope',
+    'no error', 'no details', 'no difference', 'passed target'])(
+    'TEST-HARNESS-1 does not retry with %s', async condition => {
+      const envelope = stoppedReport(condition === 'context miss' ? prompts[0] : undefined, condition === 'other reason' ? 'structure' : undefined);
+      if (condition === 'failed context and target miss') envelope.results[0]!.status = 'failed';
+      if (condition === 'error context and target miss') envelope.results[0]!.status = 'error';
+      if (condition === 'skipped context and target miss') envelope.results[0]!.status = 'skipped';
+      if (condition === 'run error') envelope.errors.push({ scope: 'run', code: 'INTERNAL_ERROR', message: 'Run failed', kind: 'internal' });
+      if (condition === 'wrong case id') envelope.errors[0]!.caseId = 'another-case';
+      if (condition === 'wrong code') envelope.errors[0]!.code = 'INTERNAL_ERROR';
+      if (condition === 'wrong scope') envelope.errors[0]!.scope = 'step';
+      if (condition === 'no error') envelope.errors = [];
+      if (condition === 'no details') delete envelope.errors[0]!.details;
+      if (condition === 'no difference') delete (envelope.errors[0]!.details as Record<string, unknown>).difference;
+      if (condition === 'passed target') envelope.results.at(-1)!.status = 'passed';
+      const f = retryFake({ first: envelope });
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(f.calls('resolve')).toHaveLength(1);
+      expect(f.calls('replay')).toHaveLength(1);
+      expect(last(f)).toContain('FAIL stage=replay');
+      expect(last(f)).not.toContain('reresolved=');
+      expect(f.err()).not.toContain(retryNotice);
+    },
+  );
+
+  it('finds eligible evidence after an unrelated error by target identity', async () => {
+    const envelope = stoppedReport();
+    envelope.errors.unshift({ ...envelope.errors[0], caseId: 'unrelated-case' });
+    const f = retryFake({ first: envelope });
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(2);
+  });
+
+  it.each([{ argv: [] }, { argv: ['--regenerate'] }])('does not retry outside single-case regeneration ($argv)', async ({ argv }) => {
+    const f: Fake = createFakeDeps({ runProcess: async call => call.kind === 'replay'
+      ? result(4, JSON.stringify(stoppedReport())) : f.successfulProcess(call) });
+    expect(await run(f, argv)).toBe(1);
+    expect(f.calls('resolve')).toHaveLength(argv.length ? 1 : 0);
+    expect(f.calls('replay')).toHaveLength(1);
+    expect(last(f)).not.toContain('reresolved=');
+  });
+
+  it.each(['judge', 'publication'] as const)('retains retry evidence after %s fails', async failure => {
+    const f = retryFake({ second: suiteReport(selected, 2), judgeFailure: failure === 'judge' });
+    if (failure === 'publication') {
+      const rename = vi.mocked(fs.renameSync).getMockImplementation()!;
+      vi.mocked(fs.renameSync).mockImplementation((source, destination) => {
+        if (String(destination) === join(f.fixture, plans[oneIdx]!)) throw new Error('publication failed');
+        return rename(source, destination);
+      });
+    }
+    expect(await run(f, [...oneArgv, '--keep'])).toBe(1);
+    expect(f.calls('replay')).toHaveLength(2);
+    expect(last(f)).toContain('FAIL stage=');
+    expect(last(f)).toMatch(new RegExp(`aiCalls=6 reresolved=${oneId}(?: |$)`));
+    expect(last(f).match(/reresolved=/g)).toHaveLength(1);
+    const root = dirname(f.calls('resolve')[0]!.opts.cwd);
+    expect(JSON.parse(fs.readFileSync(join(root, 'resolve-report.json'), 'utf8')).results.at(-1).aiCalls).toBe(12);
+  });
+
+  it.each(['failed', 'invalid JSON', 'uninspectable results'])('keeps the latest second resolve report (%s)', async mode => {
+    const resolveText = mode === 'invalid JSON' ? '{invalid' : mode === 'uninspectable results' ? '{"results":{}}' : undefined;
+    const f = retryFake({ resolveFailure: mode === 'failed', ...(resolveText === undefined ? {} : { resolveText }), first: stoppedReport(undefined, undefined, 1) });
+    expect(await run(f, [...oneArgv, '--keep'])).toBe(1);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(1);
+    expect(last(f)).toContain('FAIL stage=replay');
+    expect(last(f)).toMatch(new RegExp(`aiCalls=3 reresolved=${oneId}(?: |$)`));
+    expect(last(f).match(/reresolved=/g)).toHaveLength(1);
+    const saved = fs.readFileSync(join(dirname(f.calls('resolve')[0]!.opts.cwd), 'resolve-report.json'), 'utf8');
+    if (resolveText !== undefined) expect(saved).toBe(resolveText);
+    else expect(JSON.parse(saved).results.at(-1).aiCalls).toBe(12);
+    expect(publishedRenames(f)).toEqual([]);
+  });
+
+  it('TEST-HARNESS-1 retains the retry marker and first replay count when re-resolution fails', async () => {
+    const f = retryFake({ resolveFailure: true, first: stoppedReport(undefined, undefined, 1) });
+    expect(await run(f, oneArgv)).toBe(1);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(1);
+    expect(last(f)).toContain('FAIL stage=replay');
+    expect(last(f)).toMatch(new RegExp(`aiCalls=3 reresolved=${oneId}(?: |$)`));
+    expect(publishedRenames(f)).toEqual([]);
+  });
+
+  it('TEST-HARNESS-1 resets data exclusively into a distinct empty directory before each attempt', async () => {
+    const f = retryFake();
+    expect(await run(f, oneArgv)).toBe(0);
+    expect(f.events.filter(event => ['startContainer', 'resolve', 'replay'].includes(event)))
+      .toEqual(['startContainer', 'resolve', 'startContainer', 'replay', 'startContainer', 'resolve', 'startContainer', 'replay']);
+    expect(f.starts).toHaveLength(4);
+    const paths = f.starts.map(spec => spec.data);
+    expect(new Set(paths).size).toBe(4);
+    for (const path of paths.slice(1)) {
+      const creations = vi.mocked(fs.mkdirSync).mock.calls.filter(([created]) => created === path);
+      expect(creations).toHaveLength(1);
+      const options = creations[0]![1];
+      expect(typeof options === 'object' && options !== null && options.recursive === true).toBe(false);
+    }
+  });
+
+  it.each(['plan', 'grounding', 'binding', 'aiCalls'] as const)(
+    'TEST-HARNESS-1 rejects context %s changes in the second resolve', async contextChange => {
+      const f = retryFake({ contextChange });
+      const before = snapshot(f.fixture);
+      expect(await run(f, oneArgv)).toBe(1);
+      expect(f.calls('resolve')).toHaveLength(2);
+      expect(f.calls('replay')).toHaveLength(1);
+      expect(last(f)).toContain(`context case ${signInId} ${contextChange === 'plan' || contextChange === 'grounding' ? 'changed:' : 'was re-resolved:'}`);
+      expect(last(f)).toContain(`aiCalls=0 reresolved=${oneId}`);
+      expect(snapshot(f.fixture)).toEqual(before);
+      expect(publishedRenames(f)).toEqual([]);
+    },
+  );
+
+  it('TEST-HARNESS-1 requires confirmed bindings after the second resolve', async () => {
+    const f = retryFake({ unconfirmed: true });
+    expect(await run(f, oneArgv)).toBe(1);
+    expect(f.calls('resolve')).toHaveLength(2);
+    expect(f.calls('replay')).toHaveLength(1);
+    expect(last(f)).toContain(`unconfirmed bindings after resolve: ${oneId}=editor`);
+    expect(last(f)).toContain(`aiCalls=0 reresolved=${oneId}`);
+  });
+});
+
 describe('main one-case regeneration', () => {
   it.each([
     [['--regenerate', '--case', signInId, '--case', editId]], [['--plan', 'p']], [['--case', oneId, '--plan', 'p']],

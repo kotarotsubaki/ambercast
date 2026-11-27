@@ -2621,9 +2621,16 @@ describe('run', () => {
       });
       const intentDigest = sha256HexOfCanonicalJson({ stepKind: 'action', operation: 'click', intent: SUBMIT_QUOTED_INTENT });
       const entries = { 'click-submit': { kind: 'element', locator: SUBMIT, fingerprint: FINGERPRINT, intentDigest, provenance: 'quoted-match' } } as GroundingDocument['entries'];
+      const verify = vi.spyOn(session, 'resolveGrounded');
       const result = await scenario(session, SUBMIT_QUOTED_INTENT, undefined, { clock, entries, timeoutMs: 200 });
 
-      expect(snapshots).toHaveBeenCalledTimes(3);
+      // The presence wait spends 175 ms of the single 200 ms deadline, the stored check then
+      // repeats once more after the 25 ms remainder, and the deadline is already spent when
+      // recovery starts, so quote polling observes exactly once; the second capture is the
+      // failure-evidence capture that follows the rejected proposal.
+      expect(verify.mock.calls.filter(([, query]) => query.mode === 'verify')).toHaveLength(2);
+      expect(clock.sleepCalls).toEqual([175, 25, 20, 20]);
+      expect(snapshots).toHaveBeenCalledTimes(2);
       expect(clock.monotonicMs()).toBe(240);
       expect(result.executor.structuredRequests).toHaveLength(1);
     });
@@ -5051,6 +5058,10 @@ describe('run agentic fallback pipeline', () => {
 
 describe('run path-B element recovery', () => {
   const clickDigest = computeIntentDigest({ stepKind: 'action', operation: 'click', intent: SUBMIT_INTENT });
+  // These cases pin the order of a single stored check followed by recovery; repeated
+  // stored checks (and the stable-observation wait they would add) are covered by the
+  // stored-entry wait tests, so the step deadline is zero here.
+  const withSingleStoredVerify = () => ({ config: { ...createScenario().deps.config, targets: { web: { ...RESOLVED_TARGETS.web, resolveTimeoutMs: 0 } } } });
   const pathBComponents = () => {
     const result = computeAccessibilityFingerprint(pathBSnapshot().accessibilityTree, SUBMIT, []);
     if (result.kind !== 'ok') throw new Error('The fixture requires unique component evidence.');
@@ -5100,6 +5111,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
@@ -5169,6 +5181,7 @@ describe('run path-B element recovery', () => {
       execute: foundSubmit,
     });
     const { deps, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
@@ -5224,6 +5237,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, events, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       secrets: createFakeSecretsProvider(new Map([[secretRef, secretValue]])),
       resolveAiExecutor: async () => executor,
@@ -5331,6 +5345,7 @@ describe('run path-B element recovery', () => {
       },
     });
     const { deps, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });
@@ -5415,6 +5430,7 @@ describe('run path-B element recovery', () => {
     const executor = createFakeAiExecutor({ execute: () => ({ data: { proposal: { outcome: 'none' } }, raw: '{"proposal":{"outcome":"none"}}' }) });
     const resolveAiExecutor = vi.fn<RunDeps['resolveAiExecutor']>(async () => executor);
     const { deps, events, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor,
     });
@@ -5557,6 +5573,7 @@ describe('run path-B element recovery', () => {
     const resolveGrounded = vi.spyOn(session, 'resolveGrounded');
     const executor = createFakeAiExecutor({ execute: foundSubmit });
     const { deps, recordingStorage } = createScenario({
+      ...withSingleStoredVerify(),
       uiExecutor: vi.fn(() => createFakeUiExecutor(() => session)),
       resolveAiExecutor: async () => executor,
     });

@@ -399,7 +399,7 @@ describe('assertion observations', () => {
     const observed = await execute(false);
     const baseline = await execute(true);
     expect(row(observed.outcome)).toMatchObject({ status: 'error', warnings: [] });
-    expect(report(observed.outcome).envelope.errors).toContainEqual(expect.objectContaining({ code: 'GROUNDING_UNRESOLVED', details: { stepId: 'click', reason: 'recoverable-miss' } }));
+    expect(report(observed.outcome).envelope.errors).toContainEqual(expect.objectContaining({ code: 'GROUNDING_UNRESOLVED', details: { stepId: 'click', reason: 'recoverable-miss', verification: 'element-not-found' } }));
     expect(JSON.stringify(withoutWarnings(observed.outcome))).toBe(JSON.stringify(withoutWarnings(baseline.outcome)));
     expect(observed.f.events.emitted()).toEqual(baseline.f.events.emitted());
     expect(observationReads(observed.f)).toHaveLength(1);

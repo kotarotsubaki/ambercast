@@ -1,0 +1,3 @@
+{"value":{"difference":"neighbor-names"},"expected":"If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.","note":"grounding hint branch 0","source":"#720","date":"2026-11-26"}
+{"value":{"difference":"structure"},"expected":"Run `ambercast run --resolve` to allow AI resolution for grounding misses.","note":"grounding hint branch 1","source":"#720","date":"2026-11-26"}
+{"value":{},"expected":"Run `ambercast run --resolve` to allow AI resolution for grounding misses.","note":"grounding hint branch 2","source":"#720","date":"2026-11-26"}

@@ -1638,7 +1638,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/reports/
 
 | フィールド | 型と規則 |
 | --- | --- |
-| `schemaVersion` | リテラル `3.12` |
+| `schemaVersion` | リテラル `3.13` |
 | `command` | `generate`、`run`、`check`、`heal`、`review` のいずれか |
 | `startedAt` | `YYYY-MM-DDTHH:mm:ssZ` 形式の UTC 文字列 |
 | `durationMs` | 非負の整数 |
@@ -1793,7 +1793,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
-ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
+ローカルでの検証を通ったあと、操作またはキャプチャーのステップは `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer, ignoredNames?: FingerprintNameSlot[] }` を持てる。`grounding` では、バインディングが以前の実行で確認済みの項目に由来するため、`confirmed` は常に `true` である。その項目を今回の実行で書いたという意味ではない。`quoted-match` と `ai-proposed` では、ケース終了時の値を示す。時間のフィールドは、その段階が実行されたときだけ現れる。それより前のバインディングの失敗は、代わりにケースのエラーとして報告する。
 
 ケースの全ステップが合格すると、残りの操作とキャプチャーのバインディングも `confirmed` が `true` になる。書き戻しが許可されない場合や失敗した場合も、この値は `true` のままである。グラウンディングファイルの更新を保証する値ではない。
 
@@ -1831,7 +1831,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` ケースの範囲のみ。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。追加の任意項目は下表を参照する。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", difference?: "neighbor-names" \| "structure", changedNames?: FingerprintNameSlot[], verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 要素ステップでは、`missing` はグラウンディングの項目が存在しないことを、`recoverable-miss` は既存の項目が現在のページと合わないことを示す。追加の任意項目は下表を参照する。 |
 
 `GROUNDING_UNRESOLVED` の追加診断は、初回の対象特定で失敗した場合だけに付く。この段階では、AI が要素を提案する場合と、AI を呼ばずに引用から候補が一意に決まる場合がある。
 
@@ -1857,7 +1857,7 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 
 この診断は失敗の原因を見分けるためのものである。初回の対象特定が実行ごとに揺れる問題そのものは解消しない。
 
-`reason` の語彙、`message`、`hint`、終了コード、再実行の手順は変わらない。`missing` など、ほかの `GROUNDING_UNRESOLVED` の `details` も変わらない。
+`reason` の語彙と終了コードは変わらない。回復可能な指紋の違いの案内は後述する。`missing` など、ほかの `GROUNDING_UNRESOLVED` の `details` も変わらない。
 
 `AI_RESPONSE_INVALID` の問題の `code` は、次のいずれかである。
 
@@ -1917,16 +1917,16 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 現在のスキーマのバージョンに固定されるのは、書き込み側だけである。ビューアーは、3.x のレポートであれば寛容に読む。次の例は、コマンドごとのエンベロープを 1 つずつ示す。
 
 ```json
-{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.13","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.13","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 永続化の互換アンカー {#report-persistence}
@@ -1939,6 +1939,63 @@ Stage 3 が、論理的なシークレット名の集合が変わったことを
 - [終了コード](/ambercast/ja/reference/exit-codes/#exit-code-table)
 - [ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)
 - [ambercast run](/ambercast/ja/reference/cli/run/#report-and-exits)
+
+## 隣の名前を除外した警告 {#neighbor-name-warnings}
+
+runとhealのstepの `binding.ignoredNames` は、実行をまたぐ照合から除外する全スロットを列挙する。保存済みエントリに一致した場合も、そのbindingに除外があれば毎回出る。除外がなければ項目を省く。
+
+runの `{ kind: 'neighbor-name-ignored', stepId, names, saved }` は、この実行で新たな除外を持つエントリが確定したことを示す。未確定のbindingや、除外を追加しなかった実行には出ない。警告は合否と終了コードを変えない。
+
+| 項目 | 意味 |
+| --- | --- |
+| `stepId` | 確定したエントリの除外が増えたステップ。 |
+| `names` | 取り直し時点の保存済み一覧になかった新しいスロットだけを示す。空と重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。 |
+| `saved` | 実行終了時の書き戻しでグラウンディングを書いたかを示す。許可、秘匿値の検査、直列化の検査、書き込みの失敗で保存できなければfalseになる。 |
+
+書き込みの失敗でケースがerrorになっても警告は残る。既存の警告の後に、新しい警告を計画のステップ順で並べる。人向けの出力も同じ順である。
+
+```text
+  warning: <stepId>: the text next to this element differed from the stored grounding (<slots>); it is no longer compared for this step
+```
+
+`saved` がfalseなら、同じ行の末尾に `; this was not saved, so the next replay stops here again` を加える。
+
+`<slots>` は次の表示を固定順で `, ` でつなぐ。
+
+| スロット | 表示 |
+| --- | --- |
+| `parent` | `its container` |
+| `siblingBefore` | `the element before it` |
+| `siblingAfter` | `the element after it` |
+
+人向けの出力は `binding.ignoredNames` を別途表示しない。保存済みの3.12以前のレポートは、新項目を補わずに読める。新しい出力と公開スキーマは3.13だけを受け入れる。
+
+## 回復可能な指紋の違い {#recoverable-differences}
+
+`reason: 'recoverable-miss'` の `GROUNDING_UNRESOLVED` は、保存済みエントリの照合が失敗したとき `verification` を含む。指紋の不一致で違いの種類が分かる場合は、次の項目を加える。
+
+| 項目 | 値と条件 |
+| --- | --- |
+| `difference` | `neighbor-names` または `structure`。種類が不明なら省く。 |
+| `changedNames` | `neighbor-names` のときだけ、除外していない変化したスロットを示す。空と重複を認めず、`parent`、`siblingBefore`、`siblingAfter` の固定順とする。 |
+
+該当しない項目はnullにせず省く。`candidate-changed` には追加しない。項目には分類とスロットの識別子だけを入れ、画面の文字列は含めない。
+
+`neighbor-names` のmessageとhint、および `structure` のmessageは、順に次のとおりである。
+
+```text
+The element was found, but the text next to it differs from the stored grounding.
+```
+
+```text
+If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.
+```
+
+```text
+The element was found, but the elements around it differ from the stored grounding.
+```
+
+`structure` のhintは変わらない。種類が不明な場合と、ほかの照合結果のmessageとhintも変わらない。
 
 ---
 
@@ -2008,7 +2065,7 @@ ambercast は、実行単位とケース単位の失敗を、固定のエラー�
 | `UNEXPECTED_CRASH` | 許可リストに含まれる原因名。 |
 | `EXECUTOR_UNSUPPORTED` | ターゲット、実行器、理由（`surface-mismatch` または `capability-missing`）、不足している機能、任意でサーフェス。 |
 | `PROMPT_PATH_INVALID` | パスと理由（`outside-test-dir`、`not-test-md`、`no-name` のいずれか）。 |
-| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 |
+| `GROUNDING_UNRESOLVED` | ステップ ID と理由（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected`、`candidate-changed` のいずれか）。初回の対象特定の失敗には、`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection`、`verification` のうち該当する任意項目も付く。各項目の条件は[レポート](/ambercast/ja/reference/reports/#errors)を参照する。 回復可能な指紋の不一致には `difference` が付くことがあり、`difference` が `neighbor-names` のときは `changedNames` も付く。 |
 
 ## 関連項目 {#see-also}
 
@@ -2173,7 +2230,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | バージョンなし（config には `schemaVersion` がない） | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 存在する設定ドキュメント。 | 利用可能 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | targets と steps を含む、現在の完成した `PlanDocument`。 | 利用可能 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json` | 5 | `ambercast grounding schema v5` | `Validates the committed grounding cache associated with one plan digest.` | `planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | 利用可能 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.13"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 構造化されたレポートエンベロープとコマンド固有の結果。 | 利用可能 |
 
 6つの凍結スナップショットが旧契約を保持する。v4のグラウンディングは引き続き読み取れる。サイトはコミット済みのファイルからこれらを公開し、npm パッケージはエクスポートしない。
 
@@ -2197,7 +2254,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 | `plan.schema.json` | 計画の `schemaVersion` が 5 であり、provenance source、targets、steps を含む現在の完成した `PlanDocument`。 | JSON Schema 2020-12 に変換した Zod の `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | グラウンディングの `schemaVersion` が 5 であり、`planDigest` とステップをキーとするエントリを持つ `GroundingDocument`。 | JSON Schema 2020-12 に変換した Zod の `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` が必須で、宣言される設定はそれ以外すべて任意である、存在する設定ドキュメント。 | JSON Schema 2020-12 に変換した Zod の `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report の `schemaVersion` 3.12 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report の `schemaVersion` 3.13 を持つ、構造化されたレポートエンベロープとコマンド固有の結果。 | JSON Schema 2020-12 に変換した Zod の `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` はパッケージをコンパイルした後に `node dist/schema-gen.js` を実行する。このスクリプトはスキーマディレクトリを再帰的に作成し、上記 4 つのスキーマファイルを書き出す。`dist/manifest/` 配下にはマニフェストファイルも書き出す。
 
@@ -2213,7 +2270,7 @@ ambercast は JSON Schema draft 2020-12 のファイルを公開する。これ�
 
 ## レポートスキーマ {#report-schema}
 
-`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされる。このスキーマは、構造化されたレポートエンベロープとコマンド固有の結果を検証する。対象には、Report の `schemaVersion` 3.12、必須のステップ Target 識別情報、実行された run と完了した heal の結果にあるセッション一覧が含まれる。
+`report.schema.json` は他のスキーマとともに生成され、`ambercast/schema/report.json` → `./dist/schema/report.schema.json` としてエクスポートされる。このスキーマは、構造化されたレポートエンベロープとコマンド固有の結果を検証する。対象には、Report の `schemaVersion` 3.13、必須のステップ Target 識別情報、実行された run と完了した heal の結果にあるセッション一覧が含まれる。
 
 ## 関連項目 {#see-also}
 
@@ -2652,6 +2709,18 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/glossary/
 - [環境変数](/ambercast/ja/reference/environment-variables/)
 - [MCP ツール](/ambercast/ja/reference/mcp-tools/)
 
+## 成分 {#components}
+
+`components` は指紋を、構造のハッシュと、親および直前・直後の兄弟の名前のハッシュに分ける。構造は対象のロールと名前、隣接するロール、兄弟の有無を含む。
+
+## 除外する名前とスロット {#ignored-names}
+
+`ignoredNames` は実行をまたぐ比較から除外する名前のスロットを列挙する。スロットは `parent`、`siblingBefore`、`siblingAfter` である。対象の名前と、操作直前の完全な指紋の比較は除外しない。
+
+## 違いの種類 {#difference-kind}
+
+`difference` は成分のある指紋の不一致を分類する。`neighbor-names` は除外していない隣の名前のハッシュだけが異なり、`structure` は構造のハッシュが異なることを表す。成分がなければ、この分類を省く。
+
 ---
 
 # MCP ツール
@@ -2955,6 +3024,16 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/reference/cli/run/
 `<file>` は対象のプロンプトのパスである。`failed` と `error` のケースにはこの行を表示しない。JSON では、計画を得た後の失敗したケースにも任意の `replayReadiness` が付く。準備状態は終了コードを変えない。[レポート](/ambercast/ja/reference/reports/#run-results) が値と判定の範囲を定義する。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#run-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)、[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)
+
+## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
+
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は、再解決のときに違っていた隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
+
+v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
+
+隣接する要素の出現や消失など、構造の変化は不一致のままとし、照合を緩めない。resolveの許可がない再生では、除外するスロットを追加しない。操作直前は、除外した名前も含め、同じ実行で取得した完全な指紋を比べる。
+
+表示の変化をresolveする前に、ページが意図したレコードを表示しているか確認する。[レポート](/ambercast/ja/reference/reports/#neighbor-name-warnings)で、新たに除外したスロットと保存の成否を確認できる。
 
 ---
 
@@ -3310,7 +3389,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/overview/
 | 計画の `schemaVersion` | `5` | `src/core/ir/schema.ts:62` |
 | グラウンディングの `schemaVersion` | `5`, `4` | `src/core/ir/schema.ts:74` |
 | フィンガープリントのアルゴリズム | `a11y-neighborhood-v2` | `src/core/ir/schema.ts:303` |
-| Report `schemaVersion` | `3.12` | `src/report/schema.ts:58` |
+| Report `schemaVersion` | `3.13` | `src/report/schema.ts:58` |
 
 ## 読解順序 {#reading-order}
 
@@ -3768,7 +3847,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | `src/core/ir/schema.ts:1447` |
 |  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 構造とスロット名のハッシュ。 | `src/core/ir/schema.ts:1519` |
-|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | スロット一覧。照合は完全な指紋を用いる。 | `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 実行をまたぐ名前の照合から除外するスロット一覧。 | `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | `src/core/ir/schema.ts:1465` |
 
@@ -3788,7 +3867,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/grounding-document/
 
 未知の成分項目や不正なエントリが1件でもあると、文書全体が不適合になる。スキーマ検証の対象は形と組合せであり、指紋と成分が同じ観測から得られたかは検証しない。
 
-現在の実装は `ignoredNames` を書き込まない。保存済みのエントリに `ignoredNames` がある場合も、照合には完全な指紋を用いる。
+`ignoredNames` を持つエントリは、構造と除外しない名前のハッシュで照合する。追加の条件は[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#matching)で定める。操作直前は同じ実行で取得した完全な指紋を比べる。
 
 ## トレースレコード {#trace-record}
 
@@ -3906,7 +3985,9 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/fingerprint/
 
 照合と操作直前の再確認は既存の検査を維持し、秘匿値の汚染による拒否を追加しない（`src/core/ir/fingerprint.ts:343-448`）。
 
-エントリに `components` や `ignoredNames` がある場合も、完全な指紋で照合しなければならない（MUST）。現在の実装は `ignoredNames` を書き込まない。
+`ignoredNames` がなければ完全な指紋を比べる。ある場合は `structure` と除外しないスロットの名前のハッシュを比べる。3つすべてを除外した場合は `structure` だけを比べる。
+
+操作直前は、同じ実行で対象を特定したときの完全な指紋を比べる。除外した表示でも、特定後に変われば操作しない。
 
 ## ダイジェスト {#digest}
 
@@ -3920,7 +4001,17 @@ v2 以外のタグは、厳格なグラウンディングのスキーマ検証�
 
 ## マッチング {#matching}
 
-フィンガープリントの不一致は、古い要素を安全に再生できる証拠とせず、ミスとして扱わなければならない（MUST）。これは、実装済みのバージョン判定と、不一致時の無効化に従う（`src/core/ir/schema.ts:320`、`src/core/ir/fingerprint.ts:436`）。
+指紋の不一致はミスとして扱う。ただし、保存済みの `ignoredNames` が許す成分の比較で一致した場合は例外である。名前が空の対象も、ロールと正規化した名前で一意に特定する必要がある。
+
+保存済みの成分がある場合、`structure` が違えば違いの種類は `structure` になる。構造が同じで、除外していない名前のハッシュが違えば `neighbor-names` になる。変わったスロットは `parent`、`siblingBefore`、`siblingAfter` の固定順で示す。
+
+成分がなければ違いの種類を省く。厳密なエントリの指紋が異なるのに成分がすべて同じ場合も、種類とスロットを省く。この不整合な記録はミスのままとし、成分の修正も照合の緩和も行わない。
+
+resolve が許可され、意図の一致する保存済みエントリが指紋の不一致になった場合だけ、除外するスロットを追加できる。取り直したロールと正規化した名前、および構造が保存済みと同じである必要がある。取り直し時点の名前のハッシュで差を判定し、既存の一覧に重複なく加える。
+
+差がなければ既存の一覧を保つ。条件を満たさない取り直しは、除外のない厳密なエントリになる。resolve が許可されない再生も保存済みの除外を使うが、新たな除外は加えない。
+
+確定またはケースの完走後に、書き戻しの許可に従って保存する。一致したエントリは書き換えない。除外を減らすには、厳密なエントリを作り直す必要がある。
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid` は、それぞれ別の解決結果である。ツリーがないか形式が不正なら `element-not-found`、正規化後のロールと名前に一致するノードが複数あれば `ambiguous-match`、ハッシュが古いか異なれば `fingerprint-mismatch` になる（`src/core/ir/fingerprint.ts:348`、`src/core/ir/fingerprint.ts:436`）。対にならないサロゲートがあると、生成時にはフィンガープリントが作られず、解決時には `element-not-found` になる（`src/core/ir/fingerprint.ts:57-59`、`src/core/ir/fingerprint.ts:251-253`）。
 
@@ -4212,7 +4303,8 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/spec/changelog/
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
-| グラウンディング v4 → v5 は、要素エントリに省略可能な `components` と `ignoredNames` を追加する。照合には完全な指紋を用い、ambercast は `ignoredNames` を書き込まない。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4は読み取れるため、再生成は不要である。文書の新しい書き込みはv5になり、変更のない実行はファイルを変更しない。v5スキーマはv5だけを受け入れ、v4スキーマは凍結版として残る。旧版の ambercast はv5を読み取れない。旧版へ戻す場合は `ambercast run --resolve --update-cache` でグラウンディングを再生成する。 |
+| report 3.12 → 3.13 は step の `binding.ignoredNames`、`neighbor-name-ignored` 警告と、recoverable-miss の `verification`、`difference`、`changedNames` を追加する。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 保存済みの3.12以前のレポートは、新項目を補わずに読める。新しい出力と公開スキーマは3.13だけを受け入れる。 |
+| グラウンディング v4 → v5 は、要素エントリに省略可能な `components` と `ignoredNames` を追加する。実行をまたぐ照合は保存済みの隣接する名前の除外を使える。同じ実行内の操作は完全な指紋で保護する。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4は読み取れるため、再生成は不要である。文書の新しい書き込みはv5になり、変更のない実行はファイルを変更しない。v5スキーマはv5だけを受け入れ、v4スキーマは凍結版として残る。旧版の ambercast はv5を読み取れない。旧版へ戻す場合は `ambercast run --resolve --update-cache` でグラウンディングを再生成する。 |
 | report 3.11 → 3.12 は任意の `replayReadiness` を追加する。 | `repo:src/report/schema.ts:58` | この項目がない旧版のレポートも読める。計画 5 とグラウンディング 4 は変わらず、再生成は不要である。 |
 | ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |
@@ -4329,7 +4421,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 
 要素のエントリは、ロケーター、フィンガープリント、意図のダイジェスト、来歴を持つ。解決では保存済みのロケーターを使い、フィンガープリントを照合する。エントリの形は、グラウンディングドキュメントで確かめられる。
 
-リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。不一致を命中として扱うことはない。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
+リゾルバーは、命中と `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated` を区別する。保存済みの除外スロットがあれば、以下の限定した規則で照合できる。`snapshot-invalid` と `secret-contaminated` は、ケースを中止させる。
 
 再生中の判断は、次の4つに分かれる。
 
@@ -4344,7 +4436,7 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 
 記録済みで有効なAIトレースは、AIエグゼキューターを解決せずに再生する。エージェント的なフォールバックを選ぶより前に、この経路を使う。
 
-要素の解決が命中したときは、保存済みのフィンガープリントを再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
+要素の解決が命中したときは、同じ実行で観測した完全な指紋を再生に渡す。新しい解決は要求しない。キャッシュが揃っていれば、プロバイダーを調べずに実行でき、AI呼び出しのイベントも出ない。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#replay)、[CIにおける決定性](/ambercast/ja/explanation/determinism-in-ci/#bounded-side-effects)
 
@@ -4371,6 +4463,16 @@ Source: https://kotarotsubaki.github.io/ambercast/ja/explanation/replay-and-grou
 要素のミスも同じで、その場で解決せず、終了コード4でフェイルクローズする。
 
 関連リンク: [ambercast run](/ambercast/ja/reference/cli/run/#resolve)、[構造化出力の読み取り](/ambercast/ja/agents/reading-structured-output/#decision-tree)
+
+## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
+
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は、再解決のときに違っていた隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
+
+v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
+
+隣接する要素の出現や消失など、構造の変化は不一致のままとし、照合を緩めない。resolveの許可がない再生では、除外するスロットを追加しない。操作直前は、除外した名前も含め、同じ実行で取得した完全な指紋を比べる。
+
+表示の変化をresolveする前に、ページが意図したレコードを表示しているか確認する。[レポート](/ambercast/ja/reference/reports/#neighbor-name-warnings)で、新たに除外したスロットと保存の成否を確認できる。
 
 ## ドリフトの引き継ぎ {#drift-handoff}
 

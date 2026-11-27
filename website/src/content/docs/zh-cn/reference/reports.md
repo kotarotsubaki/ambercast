@@ -11,7 +11,7 @@ description: ambercast 结构化 JSON 报告的信封、各命令的结果形状
 
 | 字段 | 类型与约定 |
 | --- | --- |
-| `schemaVersion` | 字面量 `3.12` |
+| `schemaVersion` | 字面量 `3.13` |
 | `command` | `generate`、`run`、`check`、`heal` 或 `review` |
 | `startedAt` | 格式为 `YYYY-MM-DDTHH:mm:ssZ` 的 UTC 字符串 |
 | `durationMs` | 非负整数 |
@@ -174,7 +174,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 | `review sufficient / insufficient` | `id`, `file`, `planFile`, `concerns[]` | — |
 | `review skipped` | `id`, `file`, `status: skipped` | — |
 
-经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
+经过本地验证后，操作步骤或捕获步骤可以带有 `binding: { provenance: "grounding" | "quoted-match" | "ai-proposed", confirmed: boolean, quoteWaitMs?: non-negative integer, aiProposalMs?: non-negative integer, ignoredNames?: FingerprintNameSlot[] }`。对于 `grounding`，`confirmed` 始终为 `true`，因为这个绑定来自早先某次运行中已确认的条目，并不表示该条目是在本次运行中写入的。对于 `quoted-match` 和 `ai-proposed`，它是用例结束时的值。只有对应的阶段运行过，才会出现耗时字段。更早发生的绑定失败会改为报告用例错误。
 
 用例的所有步骤都通过后，剩余操作和捕获步骤的绑定也会将 `confirmed` 设为 `true`。即使回写未获允许或写入失败，该值仍为 `true`，因此它不保证定位缓存文件已更新。
 
@@ -212,7 +212,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 | `UNEXPECTED_CRASH` | `{ cause: { name: "Error" \| "TypeError" \| "RangeError" \| "SyntaxError" \| "ReferenceError" \| "AbortError" \| "TimeoutError" } }` |
 | `FS_IO_ERROR` | `{ partiallyWritten: Array<"plan" \| "grounding"> }` 仅用例作用域。 |
 | `PROMPT_PATH_INVALID` | `{ path: non-whitespace string, reason: "outside-test-dir" \| "not-test-md" \| "no-name" }` |
-| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。新增可选字段见下表。 |
+| `GROUNDING_UNRESOLVED` | `{ stepId: string, reason: "missing" \| "recoverable-miss" \| "no-candidate" \| "ambiguous" \| "proposal-rejected" \| "candidate-changed", proposalOutcome?: "none" \| "ambiguous" \| "found", proposalRole?: string, proposalName?: string, proposalMatchCount?: non-negative integer, rejection?: "not-unique" \| "snapshot-invalid" \| "fingerprint-unavailable" \| "role-mismatch", difference?: "neighbor-names" \| "structure", changedNames?: FingerprintNameSlot[], verification?: "fingerprint-mismatch" \| "element-not-found" \| "ambiguous-match" \| "snapshot-invalid" \| "secret-contaminated" }` 对于元素步骤，`missing` 表示不存在定位条目，`recoverable-miss` 表示已有条目与当前页面不匹配。新增可选字段见下表。 |
 
 `GROUNDING_UNRESOLVED` 的新增诊断仅在首次确定目标失败时出现。在这一阶段，AI 可以提出元素候选，也可能由引文唯一确定候选而无需调用 AI。
 
@@ -238,7 +238,7 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 
 这些诊断用于区分失败原因。它们不会解决首次确定目标在不同运行之间波动的问题。
 
-`reason` 的取值、`message`、`hint`、退出码和重新运行的步骤保持不变。`missing` 等其他 `GROUNDING_UNRESOLVED` 的 `details` 也保持不变。
+`reason` 的取值和退出码保持不变。可恢复的指纹差异使用下述提示。`missing` 等其他 `GROUNDING_UNRESOLVED` 的 `details` 也保持不变。
 
 `AI_RESPONSE_INVALID` 的问题 `code` 可以是下列任一值：
 
@@ -298,16 +298,16 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 只有写入方固定在当前的 schema 版本，查看器会宽松地读取任何 3.x 报告。下面的示例各展示一个命令的信封。
 
 ```json
-{"schemaVersion":"3.12","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
+{"schemaVersion":"3.13","command":"generate","startedAt":"2026-09-06T00:00:00Z","durationMs":120,"summary":{"total":1,"passed":1,"failed":0,"errored":0,"skipped":0},"results":[{"id":"checkout.test.md","file":"checkout.test.md","planFile":"checkout.ambercast.plan.json","status":"generated","dryRun":false,"ambiguities":[],"secrets":[{"name":"LOGIN_PASSWORD","stepId":"fill-password","envVar":"AMBERCAST_SECRET_LOGIN_PASSWORD","allowed":true,"selectionSource":"target-slug"}],"durationMs":120,"aiCalls":1}],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
+{"schemaVersion":"3.13","command":"run","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[],"reportPersistence":"not-attempted"}
 ```
 ```json
-{"schemaVersion":"3.12","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"check","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 ```json
-{"schemaVersion":"3.12","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
+{"schemaVersion":"3.13","command":"heal","startedAt":"2026-09-06T00:00:00Z","durationMs":0,"summary":{"total":0,"passed":0,"failed":0,"errored":0,"skipped":0},"results":[],"errors":[]}
 ```
 
 ## 持久化兼容锚点 {#report-persistence}
@@ -320,3 +320,60 @@ schema 将 `warnings` 定义为可选字段。不含此字段的旧版报告仍�
 - [退出码](/ambercast/zh-cn/reference/exit-codes/#exit-code-table)
 - [文件布局](/ambercast/zh-cn/reference/file-layout/#run-artifacts)
 - [ambercast run](/ambercast/zh-cn/reference/cli/run/#report-and-exits)
+
+## 忽略邻近名称的警告 {#neighbor-name-warnings}
+
+run 和 heal 步骤的 `binding.ignoredNames` 列出跨次回放时不比较名称的所有槽位。只要目标绑定包含忽略槽位，每次都会显示，包括已保存记录命中的情况。没有忽略槽位时省略此字段。
+
+run 的 `{ kind: 'neighbor-name-ignored', stepId, names, saved }` 表示本次确认的记录项新增了忽略槽位。未确认的绑定或未新增槽位的回放不会产生此警告。警告不会改变结果或退出码。
+
+| 字段 | 含义 |
+| --- | --- |
+| `stepId` | 已确认记录项新增忽略槽位的步骤。 |
+| `names` | 仅列出重新确定目标时原列表没有的新增槽位。非空且不重复，按 `parent`、`siblingBefore`、`siblingAfter` 固定排序。 |
+| `saved` | 本次结束时是否写回定位缓存文件。权限、机密检查、序列化检查或写入失败阻止保存时为 false。 |
+
+即使用例因写入失败变为 error，警告仍保留。现有警告在前，新警告按执行计划的步骤顺序排列。面向人的输出遵循同样顺序：
+
+```text
+  warning: <stepId>: the text next to this element differed from the stored grounding (<slots>); it is no longer compared for this step
+```
+
+`saved` 为 false 时，同一行末尾追加 `; this was not saved, so the next replay stops here again`。
+
+`<slots>` 按固定槽位顺序用 `, ` 连接下列名称：
+
+| 槽位 | 显示名称 |
+| --- | --- |
+| `parent` | `its container` |
+| `siblingBefore` | `the element before it` |
+| `siblingAfter` | `the element after it` |
+
+面向人的输出不单独显示 `binding.ignoredNames`。已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。
+
+## 可恢复的指纹差异 {#recoverable-differences}
+
+`reason: 'recoverable-miss'` 的 `GROUNDING_UNRESOLVED` 在已保存记录项验证失败时包含 `verification`。指纹不匹配且差异已知时，还会添加下列字段：
+
+| 字段 | 值和条件 |
+| --- | --- |
+| `difference` | `neighbor-names` 或 `structure`；差异类型未知时省略。 |
+| `changedNames` | 仅在 `neighbor-names` 时列出变化且未忽略的槽位。非空且不重复，按 `parent`、`siblingBefore`、`siblingAfter` 固定排序。 |
+
+不适用的字段直接省略，不输出 null。`candidate-changed` 不添加这些字段。字段只包含分类和槽位标识符，不包含页面文字。
+
+`neighbor-names` 的 message 和 hint，以及 `structure` 的 message 依次如下：
+
+```text
+The element was found, but the text next to it differs from the stored grounding.
+```
+
+```text
+If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.
+```
+
+```text
+The element was found, but the elements around it differ from the stored grounding.
+```
+
+`structure` 的 hint 保持不变。未知差异和其他验证结果的 message 和 hint 也保持不变。

@@ -44,7 +44,9 @@ description: "本章定义定位缓存为元素步骤保存的元素指纹、指
 
 匹配验证和操作前复核沿用现有检查，不增加密钥污染拒绝条件 (`src/core/ir/fingerprint.ts:343-448`)。
 
-即使记录项包含 `components` 或 `ignoredNames`，匹配也必须比较完整指纹 (MUST)。当前实现不会写入 `ignoredNames`。
+没有 `ignoredNames` 时，匹配必须比较完整指纹 (MUST)。有此字段时，必须比较 `structure` 和未忽略槽位的名称哈希 (MUST)。三个槽位全部忽略时，只比较 `structure`。
+
+操作前，ambercast 仍比较本次回放确定目标时的完整指纹。即使是忽略的文字，在确定目标后发生变化也会阻止操作。
 
 ## 摘要 {#digest}
 
@@ -58,7 +60,17 @@ description: "本章定义定位缓存为元素步骤保存的元素指纹、指
 
 ## 匹配 {#matching}
 
-指纹不匹配必须 (MUST) 按未命中处理，不得把它当作旧元素可以安全回放的证据。这遵循已实现的版本门禁和不匹配失效机制 (`src/core/ir/schema.ts:320`) (`src/core/ir/fingerprint.ts:436`)。
+指纹不匹配必须视为未命中 (MUST)，但已保存的 `ignoredNames` 允许按上述成分规则匹配时除外。目标仍须由角色和规范化名称唯一确定，空名称也遵循此规则。
+
+有已保存的成分时，`structure` 不同表示差异类型为 `structure`。结构相同而未忽略的名称哈希不同，表示 `neighbor-names`。变化的槽位按 `parent`、`siblingBefore`、`siblingAfter` 的固定顺序列出。
+
+没有成分时，省略差异类型。严格记录项的完整指纹不同但成分全部相同时，也省略差异类型和槽位。这种不一致的记录仍为未命中；ambercast 不会修复成分或放宽匹配。
+
+只有允许 resolve 且意图一致的已保存记录项发生指纹不匹配时，才可能添加忽略槽位。重新确定的角色、规范化名称和结构必须与已保存的记录一致。ambercast 按重新确定目标时的名称哈希计算变化，并将槽位加入原列表，消除重复。
+
+没有名称变化时，保留原列表。不满足条件时，重新生成不含忽略槽位的严格记录项。不允许 resolve 的回放可以使用已保存的忽略槽位，但不会添加槽位。
+
+确认目标或用例全部通过后，ambercast 按写回权限保存新记录项。已命中的记录项保持不变。只有重建严格记录项才能减少忽略槽位。
 
 `hit`、`fingerprint-mismatch`、`element-not-found`、`ambiguous-match` 和 `snapshot-invalid` 是互不相同的解析结果。树缺失或格式错误时为 `element-not-found`；归一化后的 role 和 name 匹配多个节点时为 `ambiguous-match`；哈希过旧或不同时为 `fingerprint-mismatch` (`src/core/ir/fingerprint.ts:348`) (`src/core/ir/fingerprint.ts:436`)。未配对的代理项在生成时不产生指纹，在解析时产生 `element-not-found` (`src/core/ir/fingerprint.ts:57-59`) (`src/core/ir/fingerprint.ts:251-253`)。
 

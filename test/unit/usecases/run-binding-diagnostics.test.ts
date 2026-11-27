@@ -215,7 +215,7 @@ describe('TEST-DIAG-2 unchanged grounding failures', () => {
     expect(f.resolveAiExecutor).not.toHaveBeenCalled();
     expect(session.operations().filter(op => op.type === 'evaluate-assert')).toHaveLength(1);
   });
-  it.each(['missing', 'recoverable-miss'] as const)('keeps legacy %s details for element and AI steps', async reason => {
+  it.each(['missing', 'recoverable-miss'] as const)('reports %s details for element and AI steps', async reason => {
     for (const ai of [false, true]) {
       const f = createScenario();
       const path = await writePrompt(f.recordingStorage.storage);
@@ -227,7 +227,8 @@ describe('TEST-DIAG-2 unchanged grounding failures', () => {
       }
       const outcome = await run(f.deps, { ...DEFAULT_OPTIONS, resolve: false });
       const built = report(outcome);
-      expect(outcome.results[0]?.error?.details).toEqual({ stepId: 'bind', reason });
+      const details = { stepId: 'bind', reason, ...(!ai && reason === 'recoverable-miss' ? { verification: 'element-not-found' } : {}) };
+      expect(outcome.results[0]?.error?.details).toEqual(details);
       expect(outcome.results[0]?.error?.message).toBe(ai
         ? reason === 'missing'
           ? 'AI-directed replay has no covered trace because AI resolution is not permitted. Pass --resolve to permit resolution.'
@@ -236,7 +237,7 @@ describe('TEST-DIAG-2 unchanged grounding failures', () => {
           ? 'No grounding is stored for this locator.'
           : 'The stored grounding for this locator has no matching element on the current page.');
       expect(built.exitCode).toBe(4);
-      expect(built.envelope.errors[0]).toMatchObject({ code: 'GROUNDING_UNRESOLVED', hint: replayHint, details: { stepId: 'bind', reason } });
+      expect(built.envelope.errors[0]).toMatchObject({ code: 'GROUNDING_UNRESOLVED', hint: replayHint, details });
       expect(f.resolveAiExecutor).not.toHaveBeenCalled();
       assertZeroAiCalls(built.envelope);
     }

@@ -70,3 +70,13 @@ description: ambercast run コマンドのフラグ、再生パス、明示的�
 `<file>` は対象のプロンプトのパスである。`failed` と `error` のケースにはこの行を表示しない。JSON では、計画を得た後の失敗したケースにも任意の `replayReadiness` が付く。準備状態は終了コードを変えない。[レポート](/ambercast/ja/reference/reports/#run-results) が値と判定の範囲を定義する。
 
 関連リンク: [設定](/ambercast/ja/reference/configuration/#grounding)、[レポート](/ambercast/ja/reference/reports/#run-results)、[ファイルレイアウト](/ambercast/ja/reference/file-layout/#run-artifacts)、[終了コード](/ambercast/ja/reference/exit-codes/#aggregation-priority)
+
+## 実行ごとに変わる隣の表示 {#changing-neighbor-text}
+
+保存済みの成分があり、対象と構造が同じまま隣の表示だけが実行ごとに変わる場合、最初のAIなしの再生は一度止まる。`ambercast run --resolve` を再実行し、その結果をグラウンディングに書き戻せれば、以後は、再解決のときに違っていた隣の表示の違いでこの要素の再生が止まることはない。ほかの原因の停止（直前の操作によるページの切り替わりの途中で照合される場合など）は含まないので、その要素が以後かならずAIなしで再生できるとは限らない。対象のアクセシブルな名前の有無は問わない。
+
+v5より前のグラウンディングには成分がないため、停止がもう一度増える。最初のresolveは成分つきの厳密なエントリを作り直す。その次のresolveで、除外するスロットが加わる。
+
+隣接する要素の出現や消失など、構造の変化は不一致のままとし、照合を緩めない。resolveの許可がない再生では、除外するスロットを追加しない。操作直前は、除外した名前も含め、同じ実行で取得した完全な指紋を比べる。
+
+表示の変化をresolveする前に、ページが意図したレコードを表示しているか確認する。[レポート](/ambercast/ja/reference/reports/#neighbor-name-warnings)で、新たに除外したスロットと保存の成否を確認できる。

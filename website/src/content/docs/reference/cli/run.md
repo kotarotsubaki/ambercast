@@ -70,3 +70,16 @@ If write-back permission prevented saving changes, it prints this line instead:
 `<file>` is the prompt path. Cases with `failed` or `error` status do not print this line. In JSON, failed cases that obtained a plan also carry the optional `replayReadiness`. Readiness does not change exit codes. [Reports](/ambercast/reference/reports/#run-results) defines the values and assessment limits.
 
 Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports](/ambercast/reference/reports/#run-results), [File layout](/ambercast/reference/file-layout/#run-artifacts), [Exit codes](/ambercast/reference/exit-codes/#aggregation-priority).
+
+## Text that changes between runs {#changing-neighbor-text}
+
+With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
+Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
+This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
+This applies to targets with or without an accessible name.
+
+Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.
+
+Structure changes, including neighboring elements appearing or disappearing, remain mismatches and are never relaxed. Replays without permission to resolve never add ignored slots. Immediately before acting, ambercast still compares the complete fingerprint from this run, including ignored names.
+
+Check that the page shows the expected record before resolving a text change. The [report](/ambercast/reference/reports/#neighbor-name-warnings) identifies newly ignored slots and whether ambercast saved them.

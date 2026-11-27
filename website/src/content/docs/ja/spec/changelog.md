@@ -7,7 +7,8 @@ description: "アーティファクトのバージョン受け入れは、リリ
 
 | 変更 | エビデンス | 移行義務 |
 | --- | --- | --- |
-| グラウンディング v4 → v5 は、要素エントリに省略可能な `components` と `ignoredNames` を追加する。照合には完全な指紋を用い、ambercast は `ignoredNames` を書き込まない。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4は読み取れるため、再生成は不要である。文書の新しい書き込みはv5になり、変更のない実行はファイルを変更しない。v5スキーマはv5だけを受け入れ、v4スキーマは凍結版として残る。旧版の ambercast はv5を読み取れない。旧版へ戻す場合は `ambercast run --resolve --update-cache` でグラウンディングを再生成する。 |
+| report 3.12 → 3.13 は step の `binding.ignoredNames`、`neighbor-name-ignored` 警告と、recoverable-miss の `verification`、`difference`、`changedNames` を追加する。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 保存済みの3.12以前のレポートは、新項目を補わずに読める。新しい出力と公開スキーマは3.13だけを受け入れる。 |
+| グラウンディング v4 → v5 は、要素エントリに省略可能な `components` と `ignoredNames` を追加する。実行をまたぐ照合は保存済みの隣接する名前の除外を使える。同じ実行内の操作は完全な指紋で保護する。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4は読み取れるため、再生成は不要である。文書の新しい書き込みはv5になり、変更のない実行はファイルを変更しない。v5スキーマはv5だけを受け入れ、v4スキーマは凍結版として残る。旧版の ambercast はv5を読み取れない。旧版へ戻す場合は `ambercast run --resolve --update-cache` でグラウンディングを再生成する。 |
 | report 3.11 → 3.12 は任意の `replayReadiness` を追加する。 | `repo:src/report/schema.ts:58` | この項目がない旧版のレポートも読める。計画 5 とグラウンディング 4 は変わらず、再生成は不要である。 |
 | ケースの全ステップが合格すると、click・press・fill・fill-secret・capture のグラウンディングエントリも、書き戻しの許可に従って保存する。グラウンディングの形式は変わらない。 | `repo:src/usecases/run.ts:3490-3524`, `repo:src/usecases/run.ts:4431-4437` | 移行は不要。 |
 | プロバイダーの応答に任意の `assumptions` を追加し、`ambiguities` はターゲット未確定だけを意味する。プロデューサーのフィンガープリントが変わり、既存の計画は stale になる。 | `repo:src/core/ir/schema.ts`, `repo:src/core/ai/plan-producer-bundle.ts` | [プロデューサー変更後の再グラウンディング](/ambercast/ja/how-to/upgrade/#reground-after-producer-change) に従って計画を再生成し、グラウンディングを再構築する。 |

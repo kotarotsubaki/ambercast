@@ -33,7 +33,7 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 |  | `intentDigest` | `HexSha256` | 必填 | `/^[0-9a-f]{64}$/` | 此定位器绑定的已提交意图的摘要。| `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | 必填 | enum `quoted-match`, `ai-proposed` | 产生此定位器的首次绑定阶段。| `src/core/ir/schema.ts:1447` |
 |  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 结构与槽位名称哈希。| `src/core/ir/schema.ts:1519` |
-|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 槽位列表；仍按完整指纹匹配。| `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 跨次回放时不比较名称的槽位列表。| `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | 必填 | 字面量 `ai` | AI 条目鉴别器。| `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | 必填 | 严格 trace | 可回放的成功 轨迹。| `src/core/ir/schema.ts:1465` |
 
@@ -51,7 +51,7 @@ description: "本章定义 `GroundingDocument`，即绑定到一个执行计划�
 
 未知的组成部分字段或任何无效记录项都会使整个文档不符合 Schema。Schema 验证只检查结构和组合，不验证完整指纹与组成部分是否来自同一次观察。
 
-当前实现不会写入 `ignoredNames`。即使已保存的记录项包含 `ignoredNames`，匹配仍比较完整指纹。
+包含 `ignoredNames` 的记录项按结构和未忽略的名称哈希匹配。[元素指纹](/ambercast/zh-cn/spec/fingerprint/#matching)定义添加槽位的条件。操作前仍比较本次回放取得的完整指纹。
 
 ## 轨迹记录 {#trace-record}
 

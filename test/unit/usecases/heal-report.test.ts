@@ -47,8 +47,8 @@ function report(input: { readonly outcome?: SettledHealOutcome; readonly error?:
 }
 
 describe('buildHealReport', () => {
-  it('emits the shared 3.12 schema version', () => {
-    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.12');
+  it('emits the shared 3.13 schema version', () => {
+    expect(report({ outcome: outcome() }).envelope.schemaVersion).toBe('3.13');
   });
 
   it.each([

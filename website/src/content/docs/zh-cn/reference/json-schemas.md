@@ -14,7 +14,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | config | `https://kotarotsubaki.github.io/ambercast/schemas/config.schema.json` | 未指定版本；config 无 `schemaVersion` | `ambercast config schema` | `Validates the parsed contents of a present Ambercast configuration file.` | 当前存在的配置文档。 | 可用 |
 | plan | `https://kotarotsubaki.github.io/ambercast/schemas/plan.v5.schema.json` | 5 | `ambercast plan schema v5` | `Validates the complete generated plan document that is reviewed and committed beside its source test prompt.` | 当前完整的 `PlanDocument`，包含目标（targets）与步骤（steps）。 | 可用 |
 | grounding | `https://kotarotsubaki.github.io/ambercast/schemas/grounding.v5.schema.json` | 5 | `ambercast grounding schema v5` | `Validates the committed grounding cache associated with one plan digest.` | 包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 可用 |
-| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.12"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
+| report | `https://kotarotsubaki.github.io/ambercast/schemas/report.v3.schema.json` | 3 (`schemaVersion: "3.13"`) | `ambercast report schema v3.0` | `Zod schema for the complete versioned output of a reporting command.` | 结构化报告信封（envelope）及其命令专属结果。 | 可用 |
 
 另有 6 个冻结快照，保留旧契约；定位缓存 v4 仍可读取。站点从已提交的文件发布这些快照，npm 软件包不导出它们。
 
@@ -38,7 +38,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 | `plan.schema.json` | 执行计划 `schemaVersion` 为 5，并包含来源出处（provenance source）、目标（targets）与步骤（steps）的当前完整 `PlanDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `PlanDocument`。 | `ambercast/schema/plan.json` → `./dist/schema/plan.schema.json` |
 | `grounding.schema.json` | 定位缓存 `schemaVersion` 为 5，并包含 `planDigest` 及以步骤为键的记录项的 `GroundingDocument`。 | 转换为 JSON Schema 2020-12 的 Zod `GroundingDocument`。 | `ambercast/schema/grounding.json` → `./dist/schema/grounding.schema.json` |
 | `config.schema.json` | `$schema` 为必填项，其余声明的设置项均为可选项的当前配置文档。 | 转换为 JSON Schema 2020-12 的 Zod `RawConfig`。 | `ambercast/schema/config.json` → `./dist/schema/config.schema.json` |
-| `report.schema.json` | Report `schemaVersion` 为 3.12 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
+| `report.schema.json` | Report `schemaVersion` 为 3.13 的结构化报告信封（envelope）及其命令专属结果。 | 转换为 JSON Schema 2020-12 的 Zod `ReportEnvelope`。 | `ambercast/schema/report.json` → `./dist/schema/report.schema.json` |
 
 `npm run build` 先编译软件包，再运行 `node dist/schema-gen.js`。该脚本递归创建 Schema 目录，并写入上述 4 个 Schema 文件。它还会在 `dist/manifest/` 下写入清单文件。
 
@@ -54,7 +54,7 @@ Ambercast 发布 JSON Schema draft 2020-12 文件，用来验证配置文件、�
 
 ## 报告 Schema {#report-schema}
 
-`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.12、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
+`report.schema.json` 与其他 Schema 一同生成，并导出为 `ambercast/schema/report.json` → `./dist/schema/report.schema.json`。它验证结构化报告信封及其命令专属结果。验证范围包括 Report `schemaVersion` 3.13、必需的步骤 Target 标识，以及已执行的 run 与已完成的 heal 结果中的会话清单。
 
 ## 另请参阅 {#see-also}
 

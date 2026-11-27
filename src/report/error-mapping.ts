@@ -122,10 +122,16 @@ export const REPORT_ERROR_DETAILS = {
  * first-binding sequence already attempted and could not complete.
  *
  * @param reason - The grounding-unresolved reason this run ended with.
+ * @param difference - The known stored fingerprint difference, when available.
  * @returns The hint string to attach as `error.details.hint`.
+ * @remarks Neighbor-name guidance explains the consequence of resolving again
+ * so users can distinguish changing display text from an unexpected record.
  */
 export function groundingUnresolvedHint(reason: 'missing' | 'recoverable-miss' | 'no-candidate' |
-  'ambiguous' | 'proposal-rejected' | 'candidate-changed'): string {
+  'ambiguous' | 'proposal-rejected' | 'candidate-changed', difference?: 'neighbor-names' | 'structure'): string {
+  if (reason === 'recoverable-miss' && difference === 'neighbor-names') {
+    return 'If that text changes on every run, such as a date or a counter, run `ambercast run --resolve` again; ambercast then stops comparing it for this step. If it should not have changed, check that the page shows the record you expect.';
+  }
   switch (reason) {
     case 'missing':
     case 'recoverable-miss':
@@ -241,7 +247,10 @@ export function projectReportErrorDetails(
       break;
     case 'grounding-unresolved': {
       // An empty proposal name and a zero match count remain evidence. The
-      // reason alone determines guidance so diagnostics do not change policy.
+      // reconstruction retains difference and changedNames when
+      // present, alongside verification, so this boundary does not erase the
+      // distinction established by run. Absent fields remain absent. Guidance
+      // receives the validated difference without changing error policy.
       const candidate = GroundingUnresolvedDetails.safeParse({
         stepId: readRecordField(sourceDetails, 'stepId'), reason: readRecordField(sourceDetails, 'reason'),
         ...(readRecordField(sourceDetails, 'proposalOutcome') === undefined ? {} : { proposalOutcome: readRecordField(sourceDetails, 'proposalOutcome') }),
@@ -250,9 +259,11 @@ export function projectReportErrorDetails(
         ...(readRecordField(sourceDetails, 'proposalMatchCount') === undefined ? {} : { proposalMatchCount: readRecordField(sourceDetails, 'proposalMatchCount') }),
         ...(readRecordField(sourceDetails, 'rejection') === undefined ? {} : { rejection: readRecordField(sourceDetails, 'rejection') }),
         ...(readRecordField(sourceDetails, 'verification') === undefined ? {} : { verification: readRecordField(sourceDetails, 'verification') }),
+        ...(readRecordField(sourceDetails, 'difference') === undefined ? {} : { difference: readRecordField(sourceDetails, 'difference') }),
+        ...(readRecordField(sourceDetails, 'changedNames') === undefined ? {} : { changedNames: readRecordField(sourceDetails, 'changedNames') }),
       });
       parsed = candidate;
-      if (candidate.success) groundingHint = groundingUnresolvedHint(candidate.data.reason);
+      if (candidate.success) groundingHint = groundingUnresolvedHint(candidate.data.reason, candidate.data.difference);
       break;
     }
     case 'ai-executor-unavailable':

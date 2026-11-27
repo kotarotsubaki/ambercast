@@ -142,3 +142,15 @@ description: ambercast 全站术语的规范性定义，以及翻译时必须保
 - [JSON Schema 规范](/ambercast/zh-cn/reference/json-schemas/)
 - [环境变量](/ambercast/zh-cn/reference/environment-variables/)
 - [MCP 工具](/ambercast/zh-cn/reference/mcp-tools/)
+
+## 成分 {#components}
+
+`components` 将指纹分为结构哈希，以及父元素和紧邻兄弟元素的名称哈希。结构包括目标角色和名称、邻近角色及兄弟元素是否存在。
+
+## 忽略名称和槽位 {#ignored-names}
+
+`ignoredNames` 列出跨次回放时不比较名称的槽位：`parent`、`siblingBefore` 和 `siblingAfter`。它不会排除目标名称，也不会跳过操作前的完整指纹比较。
+
+## 差异类型 {#difference-kind}
+
+`difference` 对含成分的指纹不匹配分类。`neighbor-names` 表示只有未忽略的邻近名称哈希不同；`structure` 表示结构哈希不同。没有成分时，ambercast 省略此分类。

@@ -216,6 +216,9 @@ async function classifyReport(deps: GetRunReportDeps, runId: string): Promise<Ru
   if (!isRecord(value) || typeof value.command !== 'string') return { kind: 'unreadable', runId, reason: 'schema-mismatch' };
   if (value.command !== 'run') return { kind: 'unreadable', runId, reason: 'not-run-report' };
 
+  // Emission accepts only 3.13. Stored 3.12 and older run reports
+  // continue through the lenient fallback below without filling in new binding,
+  // warning, or difference evidence that their execution never recorded.
   const exact = ReportEnvelope.safeParse(value);
   if (exact.success && exact.data.command === 'run') {
     return { kind: 'readable', runId, envelope: exact.data, schemaVersion: exact.data.schemaVersion, exact: true };

@@ -66,7 +66,7 @@ ambercast 用一组固定的错误代码报告运行级和用例级的失败。�
 | `UNEXPECTED_CRASH` | 白名单内的原因名称。 |
 | `EXECUTOR_UNSUPPORTED` | 目标、执行器、原因（`surface-mismatch` 或 `capability-missing`）、缺少的能力，以及可选的界面。 |
 | `PROMPT_PATH_INVALID` | 路径和原因（`outside-test-dir`、`not-test-md` 或 `no-name`）。 |
-| `GROUNDING_UNRESOLVED` | 步骤 ID 和原因（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected` 或 `candidate-changed`）。首次确定目标失败时，还会包含适用的可选字段：`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection` 和 `verification`。各字段的出现条件见[报告](/ambercast/zh-cn/reference/reports/#errors)。 |
+| `GROUNDING_UNRESOLVED` | 步骤 ID 和原因（`missing`、`recoverable-miss`、`no-candidate`、`ambiguous`、`proposal-rejected` 或 `candidate-changed`）。首次确定目标失败时，还会包含适用的可选字段：`proposalOutcome`、`proposalRole`、`proposalName`、`proposalMatchCount`、`rejection` 和 `verification`。各字段的出现条件见[报告](/ambercast/zh-cn/reference/reports/#errors)。 可恢复的指纹不匹配还可包含 `difference`；`difference` 为 `neighbor-names` 时，还包含 `changedNames`。 |
 
 ## 另请参阅 {#see-also}
 

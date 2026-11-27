@@ -142,3 +142,15 @@ This registry is the index of literal tokens that translators keep verbatim acro
 - [JSON Schemas](/ambercast/reference/json-schemas/)
 - [Environment variables](/ambercast/reference/environment-variables/)
 - [MCP Tools](/ambercast/reference/mcp-tools/)
+
+## Components {#components}
+
+`components` separates the fingerprint into a structure hash and name hashes for the parent and immediately adjacent siblings. The structure includes the target's role and name, neighboring roles, and whether each sibling exists.
+
+## Ignored names and slots {#ignored-names}
+
+`ignoredNames` lists neighbor-name slots omitted from cross-run comparison: `parent`, `siblingBefore`, and `siblingAfter`. It never excludes the target's name or the complete fingerprint check immediately before acting.
+
+## Difference kind {#difference-kind}
+
+`difference` classifies a fingerprint mismatch with components: `neighbor-names` means only non-ignored neighboring name hashes differ; `structure` means the structure hash differs. Without components, ambercast omits this classification.

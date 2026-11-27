@@ -189,7 +189,7 @@ const CHECK_RESULT = {
 };
 
 describe('replay readiness report compatibility', () => {
-  it('TEST-READY-5 accepts run and check rows with the 3.12 field set', () => {
+  it('TEST-READY-5 accepts run and check rows with the 3.13 field set', () => {
     expect(RunResult.parse(RUN_RESULT)).toEqual(RUN_RESULT);
     expect(CheckResult.parse(CHECK_RESULT)).toEqual(CHECK_RESULT);
   });
@@ -232,29 +232,29 @@ describe('replay readiness report compatibility', () => {
     expectRejected(ReplayReadiness, replayReadiness);
     expectRejected(RunResult, { ...RUN_RESULT, replayReadiness });
   });
-  it('TEST-READY-5 publishes report 3.12 while plan and grounding versions stay fixed', () => {
-    expect.soft(REPORT_SCHEMA_VERSION).toBe('3.12');
+  it('TEST-READY-5 publishes report 3.13 while plan and grounding versions stay fixed', () => {
+    expect.soft(REPORT_SCHEMA_VERSION).toBe('3.13');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
     expect(GROUNDING_SCHEMA_VERSION).toBe(5);
   });
-  it('TEST-READY-5 generates JSON Schema accepting 3.12 reports', () => {
+  it('TEST-READY-5 generates JSON Schema accepting 3.13 reports', () => {
     const writes = new Map<string, string>();
     writeGeneratedArtifacts({ outDir: '/dist-output', writeFile: (path, content) => { writes.set(path, content); } });
     const schema = JSON.parse(writes.get('/dist-output/schema/report.schema.json')!) as { oneOf: { properties: { schemaVersion: { const: string } } }[] };
     expect(schema.oneOf).toHaveLength(5);
-    expect(schema.oneOf.map(branch => branch.properties.schemaVersion.const)).toEqual(Array(5).fill('3.12'));
+    expect(schema.oneOf.map(branch => branch.properties.schemaVersion.const)).toEqual(Array(5).fill('3.13'));
   });
-  it('TEST-READY-5 generates capabilities with report 3.12 and unchanged plan and grounding versions', () => {
+  it('TEST-READY-5 generates capabilities with report 3.13 and unchanged plan and grounding versions', () => {
     const writes = new Map<string, string>();
     writeGeneratedArtifacts({ outDir: '/dist-output', writeFile: (path, content) => { writes.set(path, content); } });
     const capabilities = JSON.parse(writes.get('/dist-output/manifest/capabilities.json')!);
-    expect(capabilities.schemaVersions).toEqual({ plan: 5, grounding: 5, report: '3.12' });
+    expect(capabilities.schemaVersions).toEqual({ plan: 5, grounding: 5, report: '3.13' });
   });
   it.each([
     ['capabilities.json', 'schemaVersions'], ['docs-v4-expectations.json', 'versions'],
-  ])('TEST-READY-5 pins report 3.12 in %s', (file, key) => {
+  ])('TEST-READY-5 pins report 3.13 in %s', (file, key) => {
     const fixture = JSON.parse(readFileSync(new URL(`../../fixtures/${file}`, import.meta.url), 'utf8'));
-    expect.soft(fixture[key].report).toBe('3.12');
+    expect.soft(fixture[key].report).toBe('3.13');
     expect(fixture[key].plan).toBe(file === 'capabilities.json' ? 5 : '5');
     expect(fixture[key].grounding).toBe(file === 'capabilities.json' ? 5 : '5');
   });
@@ -299,10 +299,10 @@ const CASE_FS_IO_ERROR = {
 describe('TEST-5 generator assumption report contract (SPEC-5)', () => {
   const warning = { kind: 'generator-assumption', message: 'A' };
 
-  it('pins report 3.12 at the documented source line 58', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
+  it('pins report 3.13 at the documented source line 59', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.13');
     const source = readFileSync(new URL('../../../src/report/schema.ts', import.meta.url), 'utf8');
-    expect(source.split('\n')[57]).toBe("export const REPORT_SCHEMA_VERSION = '3.12' as const;");
+    expect(source.split('\n')[58]).toBe("export const REPORT_SCHEMA_VERSION = '3.13' as const;");
   });
 
   it.each([
@@ -345,7 +345,7 @@ describe('TEST-5 generator assumption report contract (SPEC-5)', () => {
   });
 });
 
-describe('TEST-20 report schema 3.12', () => {
+describe('TEST-20 report schema 3.13', () => {
   const session = { surface: 'web', executor: { kind: 'playwright', browser: 'chromium' }, state: 'closed' };
   const step = { id: 'capture-name', type: 'capture', status: 'passed', target: 'A', variable: 'name' };
   const executed = { ...RUN_RESULT, steps: [step], sessions: { A: session } };
@@ -369,9 +369,9 @@ describe('TEST-20 report schema 3.12', () => {
     expectRejected(HealResult, without({ ...HEAL_RESULT, steps: [step] }, 'sessions'));
   });
 
-  it('pins the shared report version to 3.12', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
-    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.12' }));
+  it('pins the shared report version to 3.13', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.13');
+    expectAccepted(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.13' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.9' }));
     expectRejected(ReportEnvelope, reportEnvelope('run', [executed], { schemaVersion: '3.6' }));
   });
@@ -379,7 +379,7 @@ describe('TEST-20 report schema 3.12', () => {
 
 describe('TEST-V1 report-only version change', () => {
   it('pins Plan and Grounding schema versions while preserving the producer contract', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.13');
     expect(PLAN_SCHEMA_VERSION).toBe(5);
     expect(GROUNDING_SCHEMA_VERSION).toBe(5);
     expect(PLAN_PRODUCER_SEMANTIC_REVISIONS).toMatchObject({ instructionCoveragePolicy: 3, generatorSecretPolicy: 5, elementIntentPolicy: 1 });
@@ -414,7 +414,7 @@ function without(value: Record<string, unknown>, key: string): Record<string, un
 
 function reportEnvelope(command: string, results: unknown[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    schemaVersion: '3.12',
+    schemaVersion: '3.13',
     command,
     startedAt: STARTED_AT,
     durationMs: 42,
@@ -645,11 +645,11 @@ describe('heal schema 3.0 outcome and application matrix', () => {
     expectRejected(HealResult, legacyHealResult);
   });
 
-  it('requires schema version 3.12', () => {
+  it('requires schema version 3.13', () => {
     const version2Envelope = reportEnvelope('heal', [HEAL_RESULT], { schemaVersion: '2.0' });
 
     expectRejected(ReportEnvelope, version2Envelope);
-    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.12' });
+    expectAccepted(ReportEnvelope, { ...version2Envelope, schemaVersion: '3.13' });
   });
 });
 
@@ -657,8 +657,8 @@ describe('repair trace schema 3.6 contract', () => {
   const stage1 = { stage: 'stage1', stepId: 'click-submit' } as const;
   const stage2 = { stage: 'stage2', stepId: 'click-submit' } as const;
 
-  it('exports schema version 3.12', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
+  it('exports schema version 3.13', () => {
+    expect(REPORT_SCHEMA_VERSION).toBe('3.13');
   });
 
   it.each(['accepted', 'no-advance', 'not-eligible'] as const)('accepts stage1 %s', (outcome) => {
@@ -1209,7 +1209,7 @@ describe('report schema 3.6 AI accounting fields', () => {
   ];
 
   it('exports the exact schema version used by every report envelope', () => {
-    expect(REPORT_SCHEMA_VERSION).toBe('3.12');
+    expect(REPORT_SCHEMA_VERSION).toBe('3.13');
   });
 
   it.each(generateBranches)(

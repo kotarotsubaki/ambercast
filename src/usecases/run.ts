@@ -107,7 +107,7 @@ import type { RunEvent } from '#ports/system.js';
 import type { UiExecutorResolver } from '#ports/index.js';
 import type { StorageAdapter } from '#ports/storage.js';
 import type { Clock, EventSink, SecretsProvider } from '#ports/system.js';
-import { OBSERVED_NOTE, type AssertHeldBeforeActionsWarning, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
+import { OBSERVED_NOTE, NeighborNameSlots, type NeighborNameIgnoredWarning, type AssertHeldBeforeActionsWarning, type ExecutedRunResult, type Observed, type StepResult } from '#report/schema.js';
 import { readReplayReadiness, type RunReplayReadiness } from './replay-readiness.js';
 import { z } from 'zod';
 import {
@@ -2202,6 +2202,11 @@ function redactedError(
   }
 
   if (error instanceof GroundingUnresolvedError) {
+    // Reconstruction preserves verification, difference, and changedNames
+    // as closed diagnostic values, without redacting enum spellings into
+    // invalid evidence. Inapplicable keys remain absent. Together with report
+    // error mapping, this boundary must retain the original miss distinction;
+    // candidate-changed receives no new diagnostic fields.
     const original = error.details as ConstructorParameters<typeof GroundingUnresolvedError>[1];
     const redacted = redactJsonStrings(original, resolvedSecrets, runState) as Record<string, unknown>;
     return new GroundingUnresolvedError(message, {
@@ -2213,6 +2218,8 @@ function redactedError(
       ...(original.proposalMatchCount === undefined ? {} : { proposalMatchCount: original.proposalMatchCount }),
       ...(original.rejection === undefined ? {} : { rejection: original.rejection }),
       ...(original.verification === undefined ? {} : { verification: original.verification }),
+      ...(original.difference === undefined ? {} : { difference: original.difference }),
+      ...(original.changedNames === undefined ? {} : { changedNames: original.changedNames }),
     });
   }
 
@@ -2995,7 +3002,17 @@ async function groundedTarget(
       return verified.element;
     }
     storedMissReason = verified.reason;
-    if (!context.resolve) throw new GroundingUnresolvedError(unresolvedMessage(verified.reason), { stepId: step.id, reason: 'recoverable-miss' });
+    // This stop point owns diagnostic combinations: only a known fingerprint
+    // difference justifies difference evidence. Closed slot identities explain
+    // the miss without disclosing current screen text.
+    if (!context.resolve) {
+      const difference = verified.reason === 'fingerprint-mismatch' ? verified.difference : undefined;
+      throw new GroundingUnresolvedError(unresolvedMessage(verified.reason, difference), {
+        stepId: step.id, reason: 'recoverable-miss', verification: verified.reason,
+        ...(difference === undefined ? {} : { difference }),
+        ...(difference !== 'neighbor-names' || verified.changedNames === undefined ? {} : { changedNames: NeighborNameSlots.parse(verified.changedNames) }),
+      });
+    }
   } else if (!context.resolve) {
     throw new GroundingUnresolvedError(unresolvedMessage('missing'), { stepId: step.id, reason: 'missing' });
   }
@@ -3115,11 +3132,13 @@ function groundingAbortMessage(reason: GroundingMissReason): string {
  * differ from the resolution-enabled abort wording, while ambiguous, invalid,
  * and secret-contaminated evidence can reuse those explanations.
  */
-function unresolvedMessage(reason: 'missing' | GroundingMissReason): string {
+function unresolvedMessage(reason: 'missing' | GroundingMissReason, difference?: 'neighbor-names' | 'structure'): string {
   switch (reason) {
     case 'missing':
       return 'No grounding is stored for this locator.';
     case 'fingerprint-mismatch':
+      if (difference === 'neighbor-names') return 'The element was found, but the text next to it differs from the stored grounding.';
+      if (difference === 'structure') return 'The element was found, but the elements around it differ from the stored grounding.';
       return 'The stored grounding for this locator no longer matches the current page.';
     case 'element-not-found':
       return 'The stored grounding for this locator has no matching element on the current page.';
@@ -3585,11 +3604,14 @@ function isBindingConfirmed(state: BindingState): boolean {
 }
 
 /**
- * SPEC-R9 reports bindings only for steps that passed stage 3; a step stopped
+ * Reports bindings only for steps that passed stage 3; a step stopped
  * before stage 3 has no state and no binding. `confirmed` is always true for a
  * `grounding` binding, whose entry was confirmed in an earlier run; for other
  * provenances it reflects the current stage here, and the case-end backfill
  * accounts for later confirmation.
+ * Ignored slots are projected whenever the state has them, for both stored
+ * hits and newly decided bindings. This is persistent binding evidence rather
+ * than a one-time notice, so ordinary zero-AI replay and heal retain it too.
  */
 function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult['binding'] {
   const state = context.bindingStates.get(stepId);
@@ -3597,6 +3619,7 @@ function reportBindingFor(context: DispatchContext, stepId: StepId): StepResult[
   return {
     provenance: state.provenance,
     confirmed: isBindingConfirmed(state),
+    ...(state.ignoredNames === undefined || state.ignoredNames.length === 0 ? {} : { ignoredNames: NeighborNameSlots.parse(state.ignoredNames) }),
     ...(state.quoteWaitMs === undefined ? {} : { quoteWaitMs: state.quoteWaitMs }),
     ...(state.aiProposalMs === undefined ? {} : { aiProposalMs: state.aiProposalMs }),
   };
@@ -4317,6 +4340,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let groundingPath: string | undefined;
   let grounding: GroundingDocumentType | undefined;
   let groundingDirty = false;
+  let groundingSaved = false;
   let aiExecutorPromise: Promise<InstructionCoveredAiExecutor> | undefined;
   let classifiedError: AmbercastErrorType | undefined;
   let result: ResultWithoutDuration | undefined;
@@ -4327,7 +4351,10 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   let runState: Map<RunVariableName, CapturedRunValue> | undefined;
   let context: DispatchContext | undefined;
   let trustedPlanDocument: PlanDocument | undefined;
-  const warnings: AssertHeldBeforeActionsWarning[] = [];
+  // Existing warnings retain their accumulation order. Notices about newly
+  // ignored names are appended only after write-back is decided, in plan
+  // step order, so confirmation cannot prematurely promise persistence.
+  const warnings: (AssertHeldBeforeActionsWarning | NeighborNameIgnoredWarning)[] = [];
   const writeBackAllowed = groundingWriteBackAllowed({
     localWriteBack: deps.config.grounding.localWriteBack,
     updateCache: options.updateCache,
@@ -4767,6 +4794,7 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
           groundingPath,
           serializePersistableGrounding(grounding),
         );
+        groundingSaved = true;
       } catch (error) {
         if (error instanceof IntegrityViolationError) {
           const integrityError = redactedError(
@@ -4790,9 +4818,18 @@ async function runCase(deps: RunDeps, options: RunOptions, file: string): Promis
   }
 
   /*
+   * Notices wait for write-back because in-memory confirmation cannot promise
+   * persistence. They remain evidence even when a later failure makes the case
+   * error; neither readiness nor the verdict substitutes for the write outcome.
+   *
    * Readiness describes saved evidence independently of the case outcome.
    * Using the write-back storage also preserves heal's overlay isolation.
    */
+  for (const step of planSteps) {
+    const state = context?.bindingStates.get(step.id);
+    if (state === undefined || !isBindingConfirmed(state) || !state.addedIgnoredNames?.length) continue;
+    warnings.push({ kind: 'neighbor-name-ignored', stepId: step.id, names: NeighborNameSlots.parse(state.addedIgnoredNames), saved: groundingSaved });
+  }
   let replayReadiness: RunReplayReadiness | undefined = trustedPlanDocument === undefined
     ? undefined
     : await readReplayReadiness(deps.storage, groundingPath, trustedPlanDocument);

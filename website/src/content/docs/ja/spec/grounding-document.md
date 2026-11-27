@@ -35,7 +35,7 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 |  | `intentDigest` | `HexSha256` | required | `/^[0-9a-f]{64}$/` | ロケータが結び付けられたコミット済み意図のダイジェスト。 | `src/core/ir/schema.ts:1446` |
 |  | `provenance` | string | required | enum `quoted-match`, `ai-proposed` | このロケータを生成した初回バインディングの段階。 | `src/core/ir/schema.ts:1447` |
 |  | `components` | `FingerprintComponents` | optional | `a11y-components-v1` | 構造とスロット名のハッシュ。 | `src/core/ir/schema.ts:1519` |
-|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | スロット一覧。照合は完全な指紋を用いる。 | `src/core/ir/schema.ts:1519` |
+|  | `ignoredNames` | `FingerprintNameSlot[]` | optional | min 1; ordered; unique; requires components | 実行をまたぐ名前の照合から除外するスロット一覧。 | `src/core/ir/schema.ts:1519` |
 | `AiGroundingEntry` | `kind` | string | required | literal `ai` | AI エントリの識別子。 | `src/core/ir/schema.ts:1464` |
 |  | `trace` | `TraceRecord` | required | strict trace | 再生可能な成功トレース。 | `src/core/ir/schema.ts:1465` |
 
@@ -55,7 +55,7 @@ description: "この章は、1 つの計画ダイジェストに束縛してコ�
 
 未知の成分項目や不正なエントリが1件でもあると、文書全体が不適合になる。スキーマ検証の対象は形と組合せであり、指紋と成分が同じ観測から得られたかは検証しない。
 
-現在の実装は `ignoredNames` を書き込まない。保存済みのエントリに `ignoredNames` がある場合も、照合には完全な指紋を用いる。
+`ignoredNames` を持つエントリは、構造と除外しない名前のハッシュで照合する。追加の条件は[要素フィンガープリント](/ambercast/ja/spec/fingerprint/#matching)で定める。操作直前は同じ実行で取得した完全な指紋を比べる。
 
 ## トレースレコード {#trace-record}
 

@@ -226,6 +226,25 @@ function projectCauseName(cause: unknown): string {
 }
 
 /**
+ * Renders one neighbor-name notice as a terminal warning line.
+ *
+ * @param warning - Slot identities and the actual grounding write outcome.
+ * @param color - Whether to apply the existing warning color convention.
+ * @returns One warning line without a trailing newline.
+ * @remarks The step identifier uses the terminal control-character escape
+ * boundary; no screen text is needed to explain the changed matching rule.
+ */
+export function renderNeighborNameIgnoredWarning(
+  warning: { readonly stepId: string; readonly names: readonly ('parent' | 'siblingBefore' | 'siblingAfter')[]; readonly saved: boolean },
+  color: boolean,
+): string {
+  const labels = { parent: 'its container', siblingBefore: 'the element before it', siblingAfter: 'the element after it' };
+  const slots = warning.names.map((name) => labels[name]).join(', ');
+  const unsaved = warning.saved ? '' : '; this was not saved, so the next replay stops here again';
+  return `  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.stepId)}: the text next to this element differed from the stored grounding (${slots}); it is no longer compared for this step${unsaved}`;
+}
+
+/**
  * Renders a report-shaped value as compact terminal lines.
  *
  * @param envelope - The runtime report or an unexpected non-report value.
@@ -286,6 +305,9 @@ export function renderHumanReport(
     // Provider text is untrusted, so the terminal projection escapes it while
     // only the original report retains raw text for JSON and MCP consumers.
     const resultLines = [row];
+    // Neighbor-name notices render in this same traversal, preserving
+    // report warning order. Binding ignoredNames remains structured evidence
+    // and is not printed separately in human output.
     if (Array.isArray(item.warnings)) {
       for (const value of item.warnings as readonly unknown[]) {
         if (value === null || typeof value !== 'object') continue;
@@ -295,6 +317,12 @@ export function renderHumanReport(
         }
         if (warning.kind === 'generator-assumption' && typeof warning.message === 'string') {
           resultLines.push(`  ${colorize('warning', '33', color)}: ${escapeControlChars(warning.message)}`);
+        }
+        if (warning.kind === 'neighbor-name-ignored' && typeof warning.stepId === 'string') {
+          const notice = value as Parameters<typeof renderNeighborNameIgnoredWarning>[0];
+          if (Array.isArray(notice.names) && notice.names.length > 0
+            && notice.names.every(name => name === 'parent' || name === 'siblingBefore' || name === 'siblingAfter')
+            && typeof notice.saved === 'boolean') resultLines.push(renderNeighborNameIgnoredWarning(notice, color));
         }
       }
     }

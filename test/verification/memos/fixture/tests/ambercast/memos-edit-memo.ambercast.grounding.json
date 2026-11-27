@@ -1,0 +1,282 @@
+{
+  "entries": {
+    "click-edit": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "31a1fd2ac0ab09917901f2be1dcea7dcd1d482c3368975177b5d6ed0535bdbbd",
+        "siblingAfterName": "b79ee883ed3dc08fc43b55f06cddf578bafc1b9205140cd1630c9cd08930558f",
+        "siblingBeforeName": "1fa2dc57ace8cc86aab84b1e46a2219e88fddeaa3aec78f43412d6829ae7a987",
+        "structure": "552c629dd259c0fd9c4610654669d50deaf3d76bcb3f78cc28745862ab3628fc"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "2418ada33256a398627b15c15a3f76949814d394ebd4037336d3e39387fef601"
+      },
+      "intentDigest": "aa0aa8ae313df396137f536d5837183a16b784c1d185930e82cb2aec2a824c4b",
+      "kind": "element",
+      "locator": {
+        "name": "Edit",
+        "role": "menuitem",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-memo-menu": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "72b246d98429621213e8e53a70c43becea58c61af8962842dc05284794ff68c7",
+        "siblingBeforeName": "b7ef50b8f9801411e98469b65befeb04cc2cdb34983251f24202c0200859ad99",
+        "structure": "53c33a5a3ed76813b838abdae54797c1f416cafc23c188711c70ee4969360987"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "971f9434c80d588488ddffda0ca32bc505ed01a8d49a930fb9dc6aca144ac305"
+      },
+      "intentDigest": "28ee7f0687982cc383221aae48541ad1ea4acea36dc343c47377cffff9aca33e",
+      "kind": "element",
+      "locator": {
+        "name": "More",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "click-now-button": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "c2a335de4e66efbb72d552b6887b838c409b56df3e0ca3b1f18877bcd7e5acda",
+        "siblingBeforeName": null,
+        "structure": "3508e99cba4149138f3a89b0494ef3d8c9edfe052b7eeb4cceb5d9bf9bf52f40"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "d498e63cb85a5c17c76b51b0ee49c1ae8cb5768397545de44dce98ae15b841bd"
+      },
+      "intentDigest": "c4ac1134aad2ce8baca4f21e19d761cf3e59d1202759143e7444df2d08bc9091",
+      "kind": "element",
+      "locator": {
+        "name": "now",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-save": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "72b246d98429621213e8e53a70c43becea58c61af8962842dc05284794ff68c7",
+        "siblingBeforeName": "7217c4bab9b5bf08b606a8762708b5bd1a9963b56b590af057a38258aff84b56",
+        "structure": "6e919b5827d9917ca872edcd420e689ac20217744bf11e09e733c3ce613dc3fa"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "0e90cdba83d2fae86e85a5c19ffa2d78267b11db4fade702efa5f4f217e92bfe"
+      },
+      "intentDigest": "6d3b86e95bd3a92ddbab0ae9c2f4ff0a04245e57ac207aa6d1c0f0acb6c24798",
+      "kind": "element",
+      "locator": {
+        "name": "Save",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-search": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "e6ded1eb653aa9088b303d978ed6f5d6857e823c9dcfad1a0d6e967938282251",
+        "siblingAfterName": null,
+        "siblingBeforeName": "d2cf06fe51cada44cc01aaaeb2f528f78871e80cae3e7afdc34157be2b8180b3",
+        "structure": "6e447f0d38aefc507ea6c6f6f03195100ac442252347f255d4f3b2a6f6cb1104"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "1a0c9bbc86a52292162c0fe252bfc45dec194b1341c331b180e8fca6c3290691"
+      },
+      "intentDigest": "6bf7c4e7b25dffb4338329a00c037d25289007e5213823be8c0ec0832d079ea4",
+      "kind": "element",
+      "locator": {
+        "name": "Search",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "click-sign-in": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "72b246d98429621213e8e53a70c43becea58c61af8962842dc05284794ff68c7",
+        "siblingBeforeName": "9ffc6b04c432a388b779b6392ebb277363adf93e881a7104092a08b0fe93a772",
+        "structure": "58c497fe9f1cb77106d5238205b6917cfb80315ca4a1691bc68a8baad318f8e3"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "3216f02a2bd4aebe457b7c25d6a8be79f1fcedc2f701d6ad4db0b4615f6d94e0"
+      },
+      "intentDigest": "463e0bd31bacb9d23cfd35a4e4bc73582a2dee5af06afbe80c60ec123aa65f32",
+      "kind": "element",
+      "locator": {
+        "name": "Sign in",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "click-update": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "faa991b1a6d8d6afe12b4c728a10a29df9ea4b050ff0bab49821adb25bd34414",
+        "siblingBeforeName": "81a538e902e3558bafa22b3cf888bf7460e1ce36d59897772545d06b02a5a797",
+        "structure": "9573bc4f79d4850b5368003641020eba942342070fdcd4cde6afcdf56331ce24"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "264a38a7377b2ebe67cfcb29fc8a6f173f09c683c830ed3ffa2433ba4c717215"
+      },
+      "intentDigest": "6726faf4f6e7913c53a4ae6e2272a422248d5124795ab9d51a3d0891f7970b1e",
+      "kind": "element",
+      "locator": {
+        "name": "Update",
+        "role": "button",
+        "strategy": "accessibility"
+      },
+      "provenance": "quoted-match"
+    },
+    "fill-memo-editor": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "4a13f3d28a00a3f888540e05859c8d08e20a50cd3b77f0b51fe3401aa8d343c7",
+        "siblingBeforeName": null,
+        "structure": "f2d04abe7810be38825a8ca1d992e817ee26cd8b04371d2e9fec7fe7b89492a4"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "37158f5623311a6cae9424551667e5be5276a32b37010cb90eaefeca264aec55"
+      },
+      "intentDigest": "351302b6089a8c3f4feba0b010e2eb970276c9663e79ee01f2eaf5a3db554d53",
+      "kind": "element",
+      "locator": {
+        "name": "",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-memo-text": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "4a13f3d28a00a3f888540e05859c8d08e20a50cd3b77f0b51fe3401aa8d343c7",
+        "siblingBeforeName": "dbb082e858a2457e6ca77f3b7222c89e44517004374fa843cad16fa149d91ed8",
+        "structure": "4bef9d8b0d4ac48f5c122664edd0bebcecf33c8afa5fae606cdf304cbceab85a"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "c6347ebed3a46cdcaa79eefdcad0677be96105ffa4b0cb322fb314d88de5a8bf"
+      },
+      "ignoredNames": [
+        "siblingBefore"
+      ],
+      "intentDigest": "ecf72233de31fc408aa9090ed51cb32c8b9016823bcd686baa4cefbfae956107",
+      "kind": "element",
+      "locator": {
+        "name": "",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-password": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "91df666f5da3d3676aaf1dca9463fcd0d8ed6bf448c671542e93b08500f945ec",
+        "siblingBeforeName": "9ffc6b04c432a388b779b6392ebb277363adf93e881a7104092a08b0fe93a772",
+        "structure": "661cf2b370401a3a34c4bb42ffc80189579682d4f82c6a35d2ea461445ca577c"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "5ddd8e6bb92aff820daac95456998be29d4ea9d7cc94a4543d9e31e3cbecd52a"
+      },
+      "intentDigest": "5ab0808f4a2b30a8078324ddd36d1aa33c28c8a838c87207c328b2de91ebc70d",
+      "kind": "element",
+      "locator": {
+        "name": "Password",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-search-box": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "fa8f9bd7f7b6bb6c7d2c3a0db0b72e5dfb8a9888bb9b39694baf3e2ad09eb397",
+        "siblingAfterName": "0f24fed8647e587035d2386205e6de3282c29c9bc261786a04f1f6f4ec86ab01",
+        "siblingBeforeName": "e0e7e593157ee295042c6e1d6cf84e9197f29acb1e19a238d452ac2adcd10083",
+        "structure": "95d66925bc7b0db538cf00e49e9f8a8f755700bc5e339e6883e44836364bfd81"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "95241027e7a2d649c3aa38c2dc065bfbd0fa5cf0a27a12436891149c7a8c941e"
+      },
+      "intentDigest": "1b082f47d466d9398f83c719b7a6b63c7effd93ed334a846cb3862490cc471ea",
+      "kind": "element",
+      "locator": {
+        "name": "Search Memos",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "fill-username": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "be2f7ad3cd26d15120d9da3227e6f002c38a7274ed958ad5ab4fec32b618bafe",
+        "siblingAfterName": "f95430babbbfd94f5584dd59a1535cb9d414960abc5820ec2a9a440284c2fefe",
+        "siblingBeforeName": "3c7ea0a09a06316778c8b19b72c72530b844d0e76fb920b6c1016a29d52c6e57",
+        "structure": "fc707fe5a9acb0258a9a759883c5003e43800010476b5e84cd7ee95cd8031617"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "f34378aac0c5e319f78db6becf67f1636d116c38dca19b7b00860b37d10e85d0"
+      },
+      "intentDigest": "6820799291daa0164592612fb8bc431b6710a2e4520eb9e5dcf23f96da1af02b",
+      "kind": "element",
+      "locator": {
+        "name": "Username",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    },
+    "press-enter-search": {
+      "components": {
+        "algorithm": "a11y-components-v1",
+        "parentName": "fa8f9bd7f7b6bb6c7d2c3a0db0b72e5dfb8a9888bb9b39694baf3e2ad09eb397",
+        "siblingAfterName": "0f24fed8647e587035d2386205e6de3282c29c9bc261786a04f1f6f4ec86ab01",
+        "siblingBeforeName": "e0e7e593157ee295042c6e1d6cf84e9197f29acb1e19a238d452ac2adcd10083",
+        "structure": "95d66925bc7b0db538cf00e49e9f8a8f755700bc5e339e6883e44836364bfd81"
+      },
+      "fingerprint": {
+        "algorithm": "a11y-neighborhood-v2",
+        "hash": "95241027e7a2d649c3aa38c2dc065bfbd0fa5cf0a27a12436891149c7a8c941e"
+      },
+      "intentDigest": "0c3d1aabf8449f4c4fe4efcf4317a311d1fb8664dad798a7f16918ba90690424",
+      "kind": "element",
+      "locator": {
+        "name": "Search Memos",
+        "role": "textbox",
+        "strategy": "accessibility"
+      },
+      "provenance": "ai-proposed"
+    }
+  },
+  "planDigest": "9bfbb3626732da3bb3d73a9821d8d179d816a17683939323af4891a4d7a36fa0",
+  "schemaVersion": 5
+}

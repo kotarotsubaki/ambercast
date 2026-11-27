@@ -155,6 +155,17 @@ afterEach(() => {
 const PLAN = '/workspace/tests/login.ambercast.plan.json';
 const GROUNDING = '/workspace/tests/login.ambercast.grounding.json';
 
+/**
+ * Gives the `web` target a zero stored-entry wait so every replay verifies a
+ * stored entry exactly once. Tests whose injected clock ignores `sleep` use it
+ * so a missing stored entry is not re-verified until a deadline that never
+ * arrives; the deadline under test stays driven by `heal.caseTimeoutMs` and the
+ * clock readings.
+ */
+function withSingleVerification(config: HealDeps['config']): HealDeps['config'] {
+  return { ...config, targets: { ...config.targets, web: { ...config.targets.web!, resolveTimeoutMs: 0 } } };
+}
+
 // A spread avoids excess-property checks: this proves outcome discrimination,
 // rather than merely rejecting a property missing from every outcome.
 function assertAssumptionWarningTypes(outcome: HealCaseOutcome): void {
@@ -3926,7 +3937,7 @@ describe('heal state-machine contract', () => {
       ]),
       aiExecutor: createFakeAiExecutor({ execute }),
     });
-    const result = await heal({ ...scenario.deps, clock: { now: () => new Date(), monotonicMs: () => expired ? 2 : 0, sleep: async () => undefined }, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, clock: { now: () => new Date(), monotonicMs: () => expired ? 2 : 0, sleep: async () => undefined }, config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1 } } }, OPTIONS);
     const outcome = result.outcome.results[0]!;
     expect({ repairOutcome: outcome.repairOutcome, stopReason: outcome.stopReason, finalFirstFailureIndex: outcome.finalFirstFailureIndex }).toEqual({ repairOutcome: 'unresolved', stopReason: 'deadline', finalFirstFailureIndex: 0 });
     expect(result.commits.has(OPTIONS.files[0]!)).toBe(false);
@@ -3960,7 +3971,7 @@ describe('heal state-machine contract', () => {
     };
     const clock = { now: () => new Date(), monotonicMs: () => stageTwoCandidateReplayed ? 2 : 0, sleep: async () => undefined };
 
-    const result = await heal({ ...scenario.deps, clock, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, clock, config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1 } } }, OPTIONS);
     const outcome = result.outcome.results[0]!;
     expect(outcome).toMatchObject({ repairOutcome: 'partially-healed', stopReason: 'deadline' });
     expect(stageTwoGenerationCompleted).toBe(true);
@@ -3972,7 +3983,7 @@ describe('heal state-machine contract', () => {
 
   it('returns unresolved at a deadline before progress without entering Stage 3', async () => {
     const scenario = await createScenario();
-    const result = await heal({ ...scenario.deps, clock: { now: () => new Date(), monotonicMs: vi.fn().mockReturnValueOnce(0).mockReturnValue(2), sleep: async () => undefined }, config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1 } } }, OPTIONS);
+    const result = await heal({ ...scenario.deps, clock: { now: () => new Date(), monotonicMs: vi.fn().mockReturnValueOnce(0).mockReturnValue(2), sleep: async () => undefined }, config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1 } } }, OPTIONS);
     const outcome = result.outcome.results[0]!;
     expect({ repairOutcome: outcome.repairOutcome, stopReason: outcome.stopReason, finalFirstFailureIndex: outcome.finalFirstFailureIndex }).toEqual({ repairOutcome: 'unresolved', stopReason: 'deadline', finalFirstFailureIndex: 0 });
     expect(result.commits.has(OPTIONS.files[0]!)).toBe(false);
@@ -4393,7 +4404,7 @@ describe('heal state-machine contract', () => {
       ...scenario.deps,
       events: events.sink,
       clock: { now: () => new Date(), monotonicMs: () => expired ? 2 : 0, sleep: async () => undefined },
-      config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1 } },
+      config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1 } },
     }, OPTIONS);
 
     expect(result.outcome.results[0]).toMatchObject({ repairOutcome: 'unresolved', stopReason: 'deadline', finalFirstFailureIndex: 0 });
@@ -4449,7 +4460,7 @@ describe('heal state-machine contract', () => {
       storage,
       resolveAiExecutor,
       clock: { now: () => new Date(), monotonicMs, sleep: async () => undefined },
-      config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1 } },
+      config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1 } },
     }, OPTIONS);
 
     expect(preflightFinished).toBe(true);
@@ -4499,7 +4510,7 @@ describe('heal state-machine contract', () => {
       ...scenario.deps,
       storage,
       clock: { now: () => new Date(), monotonicMs, sleep: async () => undefined },
-      config: { ...scenario.deps.config, heal: { caseTimeoutMs: 1, maxStepRepairs: 2 } },
+      config: { ...withSingleVerification(scenario.deps.config), heal: { caseTimeoutMs: 1, maxStepRepairs: 2 } },
     }, { ...OPTIONS, files: [first, second] });
 
     expect(result.outcome.results).toHaveLength(2);
@@ -5215,7 +5226,7 @@ describe('heal repairTrace contract (SPEC-9 and SPEC-10)', () => {
     const denied = await createScenario();
     const [noChangesResult, deniedResult] = await Promise.all([
       heal(noChanges.deps, OPTIONS),
-      heal({ ...denied.deps, clock: { now: () => new Date(), monotonicMs: vi.fn().mockReturnValueOnce(0).mockReturnValue(2), sleep: async () => undefined }, config: { ...denied.deps.config, heal: { caseTimeoutMs: 1 } } }, OPTIONS),
+      heal({ ...denied.deps, clock: { now: () => new Date(), monotonicMs: vi.fn().mockReturnValueOnce(0).mockReturnValue(2), sleep: async () => undefined }, config: { ...withSingleVerification(denied.deps.config), heal: { caseTimeoutMs: 1 } } }, OPTIONS),
     ]);
 
     expect(noChangesResult.outcome.results[0]?.repairTrace).toEqual([]);

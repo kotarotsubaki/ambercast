@@ -3996,7 +3996,9 @@ describe('run AI lifecycle accounting', () => {
       elementGrounding(['click-submit']),
     );
 
-    const outcome = await run(deps, DEFAULT_OPTIONS);
+    // The clock's reading never advances on sleep, so the mismatched stored entry
+    // is verified once rather than re-verified until a step deadline.
+    const outcome = await run(withSingleAssertionObservation(deps), DEFAULT_OPTIONS);
 
     expect(outcome.results[0]?.result).toMatchObject({
       status: 'error',

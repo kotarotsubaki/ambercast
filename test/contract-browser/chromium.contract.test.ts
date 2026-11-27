@@ -107,7 +107,8 @@ const MUTABLE_DESCRIPTOR_PAGE = `data:text/html,${encodeURIComponent(`<!doctype 
     </main>
     <script>
       document.querySelector('#mutate').addEventListener('click', () => {
-        document.querySelector('#descriptor').textContent = 'Beta';
+        const descriptor = document.querySelector('#descriptor');
+        descriptor.textContent = descriptor.textContent === 'Alpha' ? 'Beta' : 'Gamma';
       });
     </script>
   </body>

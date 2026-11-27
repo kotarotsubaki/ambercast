@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { ElementRef, FingerprintComponents, Fingerprint, JsonValueT, TargetDefinition } from '../../../src/core/ir/schema.js';
+import type { ElementRef, FingerprintComponents, FingerprintNameSlot, Fingerprint, JsonValueT, TargetDefinition } from '../../../src/core/ir/schema.js';
 import type { SecretSinkPolicy } from '#core/secrets/sink-policy.js';
 import type {
   AccessibilityCapture,
@@ -53,6 +53,8 @@ describe('browser port shapes', () => {
       | {
           readonly kind: 'miss';
           readonly reason: 'fingerprint-mismatch' | 'element-not-found' | 'ambiguous-match' | 'snapshot-invalid' | 'secret-contaminated';
+          readonly difference?: 'structure' | 'neighbor-names';
+          readonly changedNames?: readonly [FingerprintNameSlot, ...FingerprintNameSlot[]];
         }
     >();
     expectTypeOf<BoundElement>().toEqualTypeOf<{
@@ -61,7 +63,7 @@ describe('browser port shapes', () => {
       readonly components?: FingerprintComponents;
     }>();
     expectTypeOf<GroundingQuery>().toEqualTypeOf<
-      | { readonly mode: 'verify'; readonly fingerprint: Fingerprint }
+      | { readonly mode: 'verify'; readonly fingerprint: Fingerprint; readonly components?: FingerprintComponents; readonly ignoredNames?: readonly FingerprintNameSlot[] }
       | { readonly mode: 'compute'; readonly resolvedSecrets: Iterable<ReadonlySet<string>> }
     >();
   });

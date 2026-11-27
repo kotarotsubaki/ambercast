@@ -44,8 +44,10 @@ import { BoundElementRejectedError } from '#core/errors/bound-element-rejected-e
 import { IntegrityViolationError } from '#core/errors/integrity-violation-error.js';
 import { extractDiscardedScalarValues, parseAriaSnapshot } from '#core/ir/aria-snapshot.js';
 import {
+  assertLegalGroundingQuery,
   computeAccessibilityFingerprint,
   resolveAccessibilityFingerprint,
+  verifyAccessibilityFingerprint,
 } from '#core/ir/fingerprint.js';
 import type { ElementRef, Fingerprint, FingerprintComponents, TargetDefinition } from '#core/ir/schema.js';
 import type { ResolvedUiExecutorConfig } from '#core/config/schema.js';
@@ -562,10 +564,17 @@ class ChromiumBrowserSession implements BrowserSession {
    * untouched for the later stable capture.
    */
   async resolveGrounded(ref: ElementRef, query: GroundingQuery): Promise<GroundedResolution> {
+    // Verify delegates stored evidence to the shared core comparison,
+    // preserving absence, ambiguity, and invalid-snapshot outcomes. Invalid
+    // queries, including ignoredNames without components, throw rather
+    // than masquerade as misses. Only fingerprint mismatches carry the
+    // core's optional difference and changed-slot evidence; absent diagnostic
+    // fields stay omitted. This adapter never adds exclusions.
+    // A hit mints its live handle from the current full fingerprint, so
+    // later continuity checks compare against the observation actually bound,
+    // even when stored neighboring names were excluded across executions.
+    assertLegalGroundingQuery(query);
     const recordedRef = copyElementRef(ref);
-    const expectedFingerprint = query.mode === 'verify'
-      ? copyFingerprint(query.fingerprint)
-      : undefined;
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const before = this.page.navigationGeneration();
@@ -577,15 +586,12 @@ class ChromiumBrowserSession implements BrowserSession {
       }
 
       if (query.mode === 'verify') {
-        if (expectedFingerprint === undefined) {
-          throw new Error('A verify grounding query requires a fingerprint.');
+        const result = verifyAccessibilityFingerprint(capture.tree, recordedRef, query);
+        if (result.kind === 'hit') {
+          return { kind: 'hit', element: this.mintBoundElement(recordedRef, result.fingerprint, after, result.components), components: result.components };
         }
-
-        const result = resolveAccessibilityFingerprint(capture.tree, recordedRef, expectedFingerprint);
-        const observed = result === 'hit' ? computeAccessibilityFingerprint(capture.tree, recordedRef, []) : undefined;
-        return result === 'hit'
-          ? { kind: 'hit', element: this.mintBoundElement(recordedRef, expectedFingerprint, after, observed?.kind === 'ok' ? observed.components : undefined), ...(observed?.kind === 'ok' ? { components: observed.components } : {}) }
-          : { kind: 'miss', reason: result };
+        const { kind, ...diagnostics } = result;
+        return { kind: 'miss', reason: kind, ...diagnostics };
       }
 
       const result = computeAccessibilityFingerprint(capture.tree, recordedRef, query.resolvedSecrets);
@@ -650,6 +656,10 @@ class ChromiumBrowserSession implements BrowserSession {
    * behavior and do not inherit secret-sink policy concerns.
    */
   private async reverifyBinding(target: BoundElement): Promise<ReverifiedBinding> {
+    // Continuity remains strict against the handle's full fingerprint.
+    // Even an excluded neighbor changing after bind causes action refusal
+    // with the existing rejection classification, message, and exit behavior;
+    // cross-execution exclusions must not authorize retrying a failed action.
     const record = this.#bindings.get(target);
     if (record === undefined) {
       throw new BoundElementRejectedError('provenance-invalid', 'Bound element provenance is not valid for this browser session.');

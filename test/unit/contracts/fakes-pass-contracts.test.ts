@@ -1,4 +1,4 @@
-import type { ElementRef } from '../../../src/core/ir/schema.js';
+import type { ElementRef, JsonValueT } from '../../../src/core/ir/schema.js';
 import { computeAccessibilityFingerprint } from '../../../src/core/ir/fingerprint.js';
 import { describe, expect, it } from 'vitest';
 import type { BrowserSession } from '../../../src/ports/browser.js';
@@ -11,7 +11,6 @@ import { registerAiExecutorContract } from '../../contracts/ai-executor.contract
 import { registerUiExecutorContract } from '../../contracts/ui-executor.contract.js';
 import { registerUiExecutorReplayContract } from '../../contracts/ui-executor-replay.contract.js';
 import {
-  fingerprintWithFlippedLeadingHexCharacter,
   registerBrowserSessionContract,
 } from '../../contracts/browser-session.contract.js';
 import { registerClockContract } from '../../contracts/clock.contract.js';
@@ -42,6 +41,7 @@ function sessionKey(ref: ElementRef): string {
 }
 
 const fakeContractEntries = new WeakMap<FakeBrowserSession, Map<string, FakeBrowserSessionEntry>>();
+const fakeContractNeighbors = new WeakMap<BrowserSession, { name: string }>();
 
 function createContractSession(): BrowserSession {
   return createFakeBrowserSession(new Map());
@@ -62,11 +62,24 @@ registerBrowserSessionContract({
         ...(scriptedMissReasons === undefined ? {} : { scriptedMissReasons }),
       },
     ]]);
-    const session = createFakeBrowserSession(entries);
+    const neighbor = { role: 'button', name: 'Alpha', children: [] };
+    const tree = { role: 'root', name: '', children: [{ role: 'group', name: 'Container', children: [
+      { role: setup.ref.role, name: setup.ref.name, children: [] }, neighbor,
+    ] }] };
+    if (setup.scenario === 'descriptor-mutable') {
+      const observed = computeAccessibilityFingerprint(tree, setup.ref, []);
+      if (observed.kind !== 'ok') throw new Error('Mutable fixture needs complete evidence.');
+      entries.get(sessionKey(setup.ref))!.currentFingerprint = observed.fingerprint;
+    }
+    const session = createFakeBrowserSession(entries, { snapshot: {
+      accessibilityTree: tree as JsonValueT, screenshot: new Uint8Array(),
+    } });
+    fakeContractNeighbors.set(session, neighbor);
     fakeContractEntries.set(session, entries);
     return session;
   },
   navigationUrl: () => 'data:text/html,same-descriptor',
+  actualFingerprintFor: (session, setup) => fakeContractEntries.get(session as FakeBrowserSession)?.get(sessionKey(setup.ref))?.currentFingerprint ?? setup.currentFingerprint,
   supportedGroundingMissReasons: [
     'fingerprint-mismatch',
     'element-not-found',
@@ -81,7 +94,13 @@ registerBrowserSessionContract({
       throw new Error('The fake contract fixture must retain the descriptor entry to invalidate it.');
     }
 
-    entry.currentFingerprint = fingerprintWithFlippedLeadingHexCharacter(entry.currentFingerprint);
+    const neighbor = fakeContractNeighbors.get(session);
+    if (neighbor === undefined) throw new Error('Mutable fixture must retain its neighbor.');
+    neighbor.name = neighbor.name === 'Alpha' ? 'Beta' : 'Gamma';
+    const snapshot = await session.snapshotForResolution();
+    const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, setup.ref, []);
+    if (observed.kind !== 'ok') throw new Error('Mutated fixture must remain hashable.');
+    entry.currentFingerprint = observed.fingerprint;
   },
   operationObservation: (session) => operationObservation(session as FakeBrowserSession),
 });

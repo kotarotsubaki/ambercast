@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FingerprintComponents, type ElementRef, type Fingerprint } from '../../src/core/ir/schema.js';
-import type { BoundElement, BrowserSession, GroundingMissReason } from '../../src/ports/browser.js';
+import type { BoundElement, BrowserSession, GroundingMissReason, GroundingQuery } from '../../src/ports/browser.js';
 
 export type BrowserSessionContractScenario =
   | 'normal'
@@ -190,6 +190,93 @@ async function expectRejectedWithoutBrowserWork(
 
 export function registerBrowserSessionContract(harness: BrowserSessionContractHarness): void {
   describe('BrowserSession contract', () => {
+    async function observed(session: BrowserSession) {
+      const result = await session.resolveGrounded(REF, { mode: 'compute', resolvedSecrets: [] });
+      expect(result.kind).toBe('hit');
+      if (result.kind !== 'hit' || result.components === undefined) throw new Error('Contract needs full component evidence.');
+      return { fingerprint: result.element.fingerprint, components: result.components };
+    }
+
+    it.each(['strict-hit', 'neighbor-names', 'structure', 'inconsistent', 'relaxed-hit'] as const)('TEST-RELAX-12 verifies component evidence: %s', async scenario => {
+      const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true };
+      await withSession(harness, setup, async session => {
+        const current = await observed(session);
+        const changedHash = current.components.parentName === 'f'.repeat(64) ? 'e'.repeat(64) : 'f'.repeat(64);
+        const fingerprint = fingerprintWithFlippedLeadingHexCharacter(current.fingerprint);
+        if (scenario === 'strict-hit') {
+          await expect(session.resolveGrounded(REF, { mode: 'verify', ...current })).resolves.toMatchObject({ kind: 'hit' });
+          return;
+        }
+        if (scenario === 'neighbor-names') {
+          await expect(session.resolveGrounded(REF, { mode: 'verify', fingerprint, components: { ...current.components, parentName: changedHash } })).resolves.toStrictEqual({ kind: 'miss', reason: 'fingerprint-mismatch', difference: 'neighbor-names', changedNames: ['parent'] });
+          return;
+        }
+        if (scenario === 'structure') {
+          await expect(session.resolveGrounded(REF, { mode: 'verify', fingerprint, components: { ...current.components, structure: changedHash } })).resolves.toStrictEqual({ kind: 'miss', reason: 'fingerprint-mismatch', difference: 'structure' });
+          return;
+        }
+        if (scenario === 'inconsistent') {
+          await expect(session.resolveGrounded(REF, { mode: 'verify', fingerprint, components: current.components })).resolves.toStrictEqual({ kind: 'miss', reason: 'fingerprint-mismatch' });
+          return;
+        }
+        const relaxed = await session.resolveGrounded(REF, { mode: 'verify', fingerprint, components: { ...current.components, parentName: changedHash }, ignoredNames: ['parent'] });
+        expect(relaxed.kind).toBe('hit');
+        if (relaxed.kind !== 'hit') throw new Error('An excluded name must permit binding.');
+        expect(relaxed.element.fingerprint).toEqual(current.fingerprint);
+        expect(relaxed.components).toEqual(current.components);
+        expect(relaxed).not.toHaveProperty('difference');
+        expect(relaxed).not.toHaveProperty('changedNames');
+        await expect(session.perform({ type: 'click', target: relaxed.element })).resolves.toBeUndefined();
+      });
+    });
+
+    it.each(['no-components', 'empty', 'duplicate', 'order', 'null-slot', 'unknown-slot', 'unknown-algorithm', 'extra-component', 'invalid-hash', 'missing-component', 'no-fingerprint'] as const)(
+      'TEST-RELAX-12 throws for illegal verify evidence: %s', async fault => {
+        const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true };
+        await withSession(harness, setup, async session => {
+          const current = await observed(session);
+          const base = { mode: 'verify', ...current, ignoredNames: ['parent'] };
+          const queries = {
+            'no-components': { ...base, components: undefined },
+            empty: { ...base, ignoredNames: [] },
+            duplicate: { ...base, ignoredNames: ['parent', 'parent'] },
+            order: { ...base, components: { ...current.components, siblingBeforeName: 'a'.repeat(64) }, ignoredNames: ['siblingBefore', 'parent'] },
+            'null-slot': { ...base, components: { ...current.components, siblingBeforeName: null }, ignoredNames: ['siblingBefore'] },
+            'unknown-slot': { ...base, ignoredNames: ['unknown'] },
+            'unknown-algorithm': { ...base, components: { ...current.components, algorithm: 'unknown' } },
+            'extra-component': { ...base, components: { ...current.components, extra: true } },
+            'invalid-hash': { ...base, components: { ...current.components, structure: 'invalid' } },
+            'missing-component': { ...base, components: { algorithm: 'a11y-components-v1', structure: current.components.structure } },
+            'no-fingerprint': { ...base, fingerprint: undefined },
+          };
+          await expect(session.resolveGrounded(REF, queries[fault] as unknown as GroundingQuery)).rejects.toThrow();
+        });
+      },
+    );
+
+    if (harness.invalidateDescriptor !== undefined) {
+      it.each([false, true])('TEST-RELAX-4 keeps relaxed handles strict within one execution (mutated=%s)', async mutated => {
+        const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true, scenario: 'descriptor-mutable' as const };
+        await withSession(harness, setup, async session => {
+          const stored = await observed(session);
+          expect(stored.components.siblingAfterName).not.toBeNull();
+          await harness.invalidateDescriptor!(session, setup);
+          const current = await observed(session);
+          expect(current.fingerprint).not.toEqual(stored.fingerprint);
+          const relaxed = await session.resolveGrounded(REF, {
+            mode: 'verify', ...stored, ignoredNames: ['siblingAfter'],
+          });
+          expect(relaxed.kind).toBe('hit');
+          if (relaxed.kind !== 'hit') throw new Error('The changed neighbor must bind.');
+          expect(relaxed.element.fingerprint).toEqual(current.fingerprint);
+          if (mutated) {
+            await harness.invalidateDescriptor!(session, setup);
+            await expectRejectedWithoutBrowserWork(harness, session, TARGETED_OPERATIONS[0]!, relaxed.element, 'fingerprint');
+          } else await expect(session.perform({ type: 'click', target: relaxed.element })).resolves.toBeUndefined();
+        });
+      });
+    }
+
     it('allows repeated element-count evaluation with an ElementRef and no bound handle', async () => {
       const setup = { ref: REF, currentFingerprint: MATCHING_FINGERPRINT, exists: true };
       await withSession(harness, setup, async (session) => {

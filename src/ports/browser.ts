@@ -7,6 +7,7 @@ import type {
   ElementRef,
   Fingerprint,
   FingerprintComponents,
+  FingerprintNameSlot,
   JsonValueT,
   TargetDefinition,
   TracePress,
@@ -211,6 +212,12 @@ export type CaptureMode = 'text' | 'value';
  * reuses a caller capture or adds a later capture before minting, which keeps
  * the handle tied to its stable observation.
  *
+ * Verify evidence obeys the element-entry schema. When present, ignoredNames
+ * is nonempty, unique, ordered parent -> siblingBefore -> siblingAfter, and
+ * requires components with non-null stored hashes for every ignored slot.
+ * Both implementations reject violations with an exception through the same
+ * core entrance check, assertLegalGroundingQuery, before inspecting page evidence.
+ *
  * `resolveGrounded` is deliberately the only element-identity entry point:
  * routing both the "I already trust a fingerprint" and the "I need to derive
  * one" cases through one method, distinguished only by which query variant
@@ -223,6 +230,10 @@ export type GroundingQuery =
       /** Verify the current page against an already-known fingerprint. */
       readonly mode: 'verify';
       readonly fingerprint: Fingerprint;
+      /** Stored component evidence; required whenever ignoredNames is present. */
+      readonly components?: FingerprintComponents;
+      /** Stored exclusions only; the adapter must not grow this list. */
+      readonly ignoredNames?: readonly FingerprintNameSlot[];
     }
   | {
       /**
@@ -288,6 +299,10 @@ export type GroundedResolution =
        * descriptor.
        */
       readonly reason: GroundingMissReason;
+      /** Only a fingerprint mismatch with stored components may explain drift. */
+      readonly difference?: 'structure' | 'neighbor-names';
+      /** Nonempty, differing non-ignored slots, only for neighbor-name drift. */
+      readonly changedNames?: readonly [FingerprintNameSlot, ...FingerprintNameSlot[]];
     };
 
 /**

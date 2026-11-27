@@ -5,10 +5,12 @@ import {
 } from './aria-snapshot.js';
 import { toCanonicalDigestBytes } from './canonical-json.js';
 import {
+  ElementGroundingEntryV5,
   FINGERPRINT_ALGORITHM,
   type AccessibilityElementRef,
   type Fingerprint,
   type FingerprintComponents,
+  type FingerprintNameSlot,
   type JsonValueT,
 } from './schema.js';
 
@@ -106,6 +108,122 @@ export type AccessibilityFingerprintOk = {
   readonly fingerprint: Fingerprint;
   readonly components: FingerprintComponents;
 };
+
+/** Stored evidence used to verify identity across executions. */
+export type StoredFingerprintEvidence = {
+  readonly fingerprint: Fingerprint;
+  readonly components?: FingerprintComponents;
+  readonly ignoredNames?: readonly FingerprintNameSlot[];
+};
+
+/** Rejects malformed verify evidence before either browser inspects the page. */
+export function assertLegalGroundingQuery(
+  query: (StoredFingerprintEvidence & { readonly mode: 'verify' })
+    | { readonly mode: 'compute'; readonly resolvedSecrets: Iterable<ReadonlySet<string>> },
+): void {
+  if (query.mode !== 'verify') return;
+  ElementGroundingEntryV5.parse({
+    kind: 'element',
+    locator: { strategy: 'accessibility', role: 'button', name: '' },
+    intentDigest: '0'.repeat(64),
+    provenance: 'quoted-match',
+    fingerprint: query.fingerprint,
+    ...(query.components === undefined ? {} : { components: query.components }),
+    ...(query.ignoredNames === undefined ? {} : { ignoredNames: query.ignoredNames }),
+  });
+}
+
+/** Hash-only diagnostics; absent fields carry no inferred explanation. */
+export type FingerprintMismatch =
+  | { readonly kind: 'fingerprint-mismatch'; readonly difference?: never; readonly changedNames?: never }
+  | { readonly kind: 'fingerprint-mismatch'; readonly difference: 'structure'; readonly changedNames?: never }
+  | { readonly kind: 'fingerprint-mismatch'; readonly difference: 'neighbor-names'; readonly changedNames: readonly [FingerprintNameSlot, ...FingerprintNameSlot[]] };
+
+/** A successful comparison retains the current full observation. */
+export type FingerprintComparison =
+  | { readonly kind: 'hit'; readonly fingerprint: Fingerprint; readonly components: FingerprintComponents }
+  | FingerprintMismatch;
+
+/**
+ * Compares stored evidence with a current observation without reading a page.
+ *
+ * @param stored - Valid stored evidence; ignored names require components.
+ * @param observed - The full fingerprint and components from one observation.
+ * @returns A hit with the current full fingerprint, or a hash-only mismatch.
+ * @throws If ignored names are supplied without components.
+ * @remarks
+ * Without ignored names, full fingerprint equality remains mandatory.
+ * With them, structure and every non-ignored slot's name hash have to
+ * agree; ignoring all three slots therefore compares structure alone.
+ * Only stored components justify difference diagnostics: structural
+ * drift takes precedence, otherwise differing non-ignored slots
+ * explain a neighbor-name mismatch. A differing full fingerprint with equal
+ * components remains a plain mismatch, never a repaired record. An
+ * ignored-name comparison does not consult full fingerprint equality.
+ * This single pure rule is shared by real and fake browser boundaries;
+ * neither boundary chooses additional names to ignore.
+ */
+export function compareAccessibilityFingerprint(
+  stored: StoredFingerprintEvidence,
+  observed: Pick<AccessibilityFingerprintOk, 'fingerprint' | 'components'>,
+): FingerprintComparison {
+  if (stored.ignoredNames !== undefined && stored.components === undefined) {
+    throw new Error('Ignored names require fingerprint components.');
+  }
+  const components = stored.components;
+  const slots = ['parent', 'siblingBefore', 'siblingAfter'] as const;
+  const changedNames = components === undefined ? [] : slots.filter(slot =>
+    !stored.ignoredNames?.includes(slot)
+    && components[`${slot}Name`] !== observed.components[`${slot}Name`]);
+  const sameStructure = components?.structure === observed.components.structure;
+  const matches = stored.ignoredNames === undefined
+    ? stored.fingerprint.algorithm === observed.fingerprint.algorithm
+      && stored.fingerprint.hash === observed.fingerprint.hash
+    : sameStructure && changedNames.length === 0;
+  // Named fields, not a spread: a full observation also carries its own `kind: 'ok'`, which would overwrite the hit discriminator.
+  if (matches) return { kind: 'hit', fingerprint: observed.fingerprint, components: observed.components };
+  if (components !== undefined) {
+    if (!sameStructure) return { kind: 'fingerprint-mismatch', difference: 'structure' };
+    const [first, ...rest] = changedNames;
+    if (first !== undefined) {
+      return { kind: 'fingerprint-mismatch', difference: 'neighbor-names', changedNames: [first, ...rest] };
+    }
+  }
+  return { kind: 'fingerprint-mismatch' };
+}
+
+/**
+ * Verifies stored evidence against a captured accessibility tree.
+ *
+ * @param tree - Current serializable page evidence.
+ * @param ref - The stored role-and-name locator.
+ * @param stored - Valid stored fingerprint evidence.
+ * @returns The shared comparison result, or the unchanged absence, ambiguity,
+ * or invalid-snapshot classification.
+ * @throws If ignored names lack components, or unexpected hashing fails.
+ * @remarks
+ * Match-count and malformed-evidence gates precede comparison, so a
+ * neighborhood hash cannot select among duplicate locators. Verification
+ * adds no secret-taint check: generation owns that boundary. The strict
+ * resolveAccessibilityFingerprint path remains available for continuity
+ * checks within one execution.
+ */
+export function verifyAccessibilityFingerprint(
+  tree: JsonValueT,
+  ref: AccessibilityElementRef,
+  stored: StoredFingerprintEvidence,
+): FingerprintComparison | { readonly kind: 'element-not-found' | 'ambiguous-match' | 'snapshot-invalid' } {
+  if (isSnapshotInvalid(tree)) return { kind: 'snapshot-invalid' };
+  if (!isAccessibilityNode(tree)) return { kind: 'element-not-found' };
+  const matches = findAllAccessibilityMatches(tree, ref);
+  if (matches.length > 1) return { kind: 'ambiguous-match' };
+  const match = matches[0];
+  if (match === undefined) return { kind: 'element-not-found' };
+  const fingerprint = hashMatch(match);
+  const components = buildFingerprintComponents(descriptorFor(match));
+  if (fingerprint === undefined || components === undefined) return { kind: 'element-not-found' };
+  return compareAccessibilityFingerprint(stored, { fingerprint, components });
+}
 
 function isUnpairedSurrogateError(error: unknown): error is RangeError {
   return error instanceof RangeError && error.message === UNPAIRED_SURROGATE_ERROR_MESSAGE;

@@ -180,7 +180,8 @@ export function compareAccessibilityFingerprint(
     ? stored.fingerprint.algorithm === observed.fingerprint.algorithm
       && stored.fingerprint.hash === observed.fingerprint.hash
     : sameStructure && changedNames.length === 0;
-  if (matches) return { kind: 'hit', ...observed };
+  // Named fields, not a spread: a full observation also carries its own `kind: 'ok'`, which would overwrite the hit discriminator.
+  if (matches) return { kind: 'hit', fingerprint: observed.fingerprint, components: observed.components };
   if (components !== undefined) {
     if (!sameStructure) return { kind: 'fingerprint-mismatch', difference: 'structure' };
     const [first, ...rest] = changedNames;

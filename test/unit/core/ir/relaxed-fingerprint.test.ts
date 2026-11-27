@@ -41,6 +41,12 @@ describe('TEST-RELAX-2 target identity', () => {
     expect(computeAccessibilityFingerprint(tree, RELAX_REF, [new Set([secret])])).toEqual({ kind: 'secret-contaminated' });
     expect(verifyAccessibilityFingerprint(tree, RELAX_REF, { ...observation(), ignoredNames: ['siblingBefore'] })).toEqual({ kind: 'hit', ...observation(tree) });
   });
+  it('keeps the hit discriminator when the observation is a full compute result', () => {
+    const live = computeAccessibilityFingerprint(neighborTree(), RELAX_REF, []);
+    if (live.kind !== 'ok') throw new Error('Fixture must produce an ok observation.');
+    expect(compareAccessibilityFingerprint(observation(), live)).toStrictEqual({ kind: 'hit', fingerprint: live.fingerprint, components: live.components });
+    expect(compareAccessibilityFingerprint({ ...observation(), ignoredNames: ['siblingBefore'] }, live).kind).toBe('hit');
+  });
   it('does not use relaxed hashes to choose among duplicate locators', () => {
     const tree = { role: 'root', name: '', children: [neighborTree(), neighborTree()] };
     expect(verifyAccessibilityFingerprint(tree, RELAX_REF, { ...observation(), ignoredNames: ['parent', 'siblingBefore', 'siblingAfter'] })).toEqual({ kind: 'ambiguous-match' });

@@ -630,8 +630,10 @@ export function createFakeBrowserSession(
       assertLegalGroundingQuery(query);
       state.bindCalls += 1;
       state.operations.push({ type: 'resolve-grounded', target: ref, query });
-      const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, ref, query.mode === 'compute' ? query.resolvedSecrets : []);
-      const result = resolveBinding(state, ref, query, observed.kind === 'ok' ? observed : undefined);
+      // The port allows a single-use iterable, so materialize it once: the observation and the descriptor check both read it.
+      const readQuery = query.mode === 'compute' ? { ...query, resolvedSecrets: [...query.resolvedSecrets] } : query;
+      const observed = computeAccessibilityFingerprint(snapshot.accessibilityTree, ref, readQuery.mode === 'compute' ? readQuery.resolvedSecrets : []);
+      const result = resolveBinding(state, ref, readQuery, observed.kind === 'ok' ? observed : undefined);
       if (result.kind !== 'hit') return result;
       // A verify hit has already been compared against the live components inside resolveBinding, and compute mode reports the scripted
       // fingerprint by design, so the live components are attached to every hit here.

@@ -13,7 +13,7 @@ import { createFakeAiExecutor } from '../../doubles/fake-ai-executor.js';
 import { createFakeUiExecutor } from '../../doubles/fake-ui-executor.js';
 import { createScenario, createFakeBrowserSession, liveEntries, writePrompt, createFreshPlan, DEFAULT_OPTIONS, type TestStep } from '../../support/run-scenario.js';
 import { neighborTree, observation, RELAX_REF } from '../../support/relaxed-fingerprint.js';
-import { assertDiagnosable, assertZeroAiCalls } from '../../support/report-assertions.js';
+import { assertDiagnosable, assertNoSecretDisclosure, assertZeroAiCalls } from '../../support/report-assertions.js';
 
 const PROMPT = '# Submit\n\nClick "Submit".\n';
 afterEach(() => vi.restoreAllMocks());
@@ -225,6 +225,8 @@ describe('TEST-RELAX-9 confirmation and persistence', () => {
     expect(result.outcome.results[0]?.error).toBeInstanceOf(fault === 'secret' ? IntegrityViolationError : FsIoError);
     expect(result.outcome.results[0]?.result.steps[0]?.binding).toMatchObject({ confirmed: true });
     if (fault !== 'secret') expect(attempts).toBe(1);
+    // The fixture seeds the secret into a retained entry on purpose, so the unchanged grounding file is not scanned; only the report is.
+    else assertNoSecretDisclosure({ secrets: { relaxedPersistence: SECRET }, report: result.report.envelope });
   });
   it.each([
     { confirms: false, ending: 'failure', saved: false },

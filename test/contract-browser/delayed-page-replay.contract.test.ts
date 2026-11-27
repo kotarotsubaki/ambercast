@@ -13,6 +13,7 @@ import { createScenario, createFreshPlan, writePrompt, DEFAULT_OPTIONS, RESOLVED
 import { resolveChromiumAvailability } from './support/chromium-availability.js';
 import { startFixtureApp, FIXTURE_CREDENTIALS, DELAY_LOWER_SLACK_MS, DELAY_UPPER_SLACK_MS, MAX_DELAY_MS, type FixtureApp } from './support/fixture-app.js';
 import { CONTRACT_REPEATS } from './support/repeats.js';
+import { instrumentExecutor } from './support/stored-entry-instrument.js';
 
 const DELAY_MS = 1500;
 const MUTATION_DELAY_MS = 3000;
@@ -181,27 +182,13 @@ function otpPage(delayMs: number): string {
 </script></body></html>`;
 }
 
-// Remove only awaitElementPresence, the #381 fix, to prove delayed transition and
-// insertion detect its regression. Bind other methods to the original session to
-// preserve private fields. Copying product polling would weaken this mutation.
-function withoutExistenceWait(executor: UiExecutor): UiExecutor {
-  return {
-    kind: executor.kind, surface: executor.surface, capabilities: executor.capabilities,
-    async launch(target) {
-      const session = await executor.launch(target);
-      return new Proxy(session, {
-        get(target, property) {
-          if (property === 'awaitElementPresence') return async () => undefined;
-          const value = Reflect.get(target, property, target);
-          return typeof value === 'function' ? value.bind(target) : value;
-        },
-      });
-    },
-  };
-}
-
 const realExecutor = () => createPlaywrightUiExecutor({ kind: 'playwright', browser: 'chromium' });
-const mutatedExecutor = () => withoutExistenceWait(realExecutor());
+// The mutation removes both ways the product can learn that a page has settled: the
+// one-shot existence wait (#381) and the repeated stored-entry verification. The
+// first miss a locator returns is replayed to every later verification, so a
+// regression of either mechanism alone cannot hide behind the other. The product's
+// repetition is not copied; the Proxy only denies it fresh results.
+const mutatedExecutor = () => instrumentExecutor(realExecutor(), { dropPresenceWait: true, stickyFirstMiss: true });
 
 function quotedIntent(body: string, text: string, roleHint: string) {
   return { description: text, roleHint, sourceSpan: bodySpan(body), quote: { text, sourceSpan: bodySpan(body, text) } };
@@ -360,7 +347,7 @@ describe('delayed page deterministic replay', () => {
   it.each([
     { name: 'client transition', delayKey: 'transitionDelayMs', makePlan: transitionPlan, stepId: 'click-back' },
     { name: 'element insertion', delayKey: 'lateElementDelayMs', makePlan: insertionPlan, stepId: 'click-late' },
-  ] as const)('TEST-7 detects removed existence waiting after $name', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async ({ delayKey, makePlan, stepId }) => {
+  ] as const)('TEST-7 detects removed existence waiting and repeated verification after $name', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async ({ delayKey, makePlan, stepId }) => {
     // Real recording, mutated replay and real control share storage, in that
     // order. The helper checks failed-run bytes before starting the real control.
     const observation = await recordThenReplay({ ...makePlan(), configure: app => app.configure({ [delayKey]: MUTATION_DELAY_MS }), recordExecutor: realExecutor, replayExecutors: [mutatedExecutor, realExecutor] });
@@ -379,9 +366,9 @@ describe('delayed page deterministic replay', () => {
     expect(control!.outcome.results[0]?.result.status, JSON.stringify({ error: control!.outcome.results[0]?.error, errors: control!.envelope.errors })).toBe('passed');
   });
 
-  it('TEST-8 preserves immediate replay when only existence waiting is removed', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async () => {
+  it('TEST-8 preserves immediate replay under the same mutation', { repeats: CONTRACT_REPEATS, timeout: 60_000 }, async () => {
     // Immediate rendering rejects a Proxy that breaks private fields or other
-    // executor behavior rather than selectively removing the #381 wait.
+    // executor behavior rather than selectively denying fresh verification results.
     const observation = await recordThenReplay({ ...transitionPlan(), configure: app => app.configure({ transitionDelayMs: 0 }), recordExecutor: realExecutor, replayExecutors: [mutatedExecutor] });
     expectSuccessfulReplay(observation, ['click-back', 'click-open'], 0);
   });

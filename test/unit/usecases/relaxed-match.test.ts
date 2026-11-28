@@ -53,15 +53,18 @@ async function fixture(options: {
       const live = liveEntries([RELAX_REF], observation(tree).fingerprint);
       const session = createFakeBrowserSession(live, { snapshot });
       if (options.transientVerify) {
-        const resolve = session.resolveGrounded.bind(session);
-        vi.spyOn(session, 'resolveGrounded').mockImplementation(async (ref, query) => {
-          const result = await resolve(ref, query);
-          if (query.mode === 'verify') {
+        // The stored check repeats until the deadline, so the page must stay mismatched through
+        // every repeat and settle only when re-resolution first observes it.
+        const observe = session.accessibilitySnapshot.bind(session);
+        let settled = false;
+        vi.spyOn(session, 'accessibilitySnapshot').mockImplementation(async () => {
+          if (!settled) {
+            settled = true;
             // Re-resolution must learn from its own observation after a transient mismatch.
             snapshot.accessibilityTree = neighborTree();
             live.get(elementRefKey(RELAX_REF))!.currentFingerprint = observation().fingerprint;
           }
-          return result;
+          return observe();
         });
       }
       vi.spyOn(session, 'evaluateAssert').mockImplementation(async () => {
@@ -140,9 +143,11 @@ describe('TEST-RELAX-6 replacement prerequisites', () => {
         return { ...executor, async launch(target) {
           const session = await executor.launch(target);
           const original = session.resolveGrounded.bind(session);
+          // The stored check repeats until the step deadline and the last result decides,
+          // so a not-found must persist; the locator fault already misses on every repeat.
           let firstVerify = true;
           vi.spyOn(session, 'resolveGrounded').mockImplementation((ref, query) => {
-            if (query.mode === 'verify' && firstVerify) {
+            if (query.mode === 'verify' && (firstVerify || (fault === 'not-found' && query.fingerprint?.hash === base.fingerprint.hash))) {
               firstVerify = false;
               return Promise.resolve({ kind: 'miss', reason: fault === 'not-found' ? 'element-not-found' : 'fingerprint-mismatch' });
             }

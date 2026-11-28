@@ -176,7 +176,9 @@ At execution, every Plan navigation, cached trace navigation, and fresh agentic 
 
 Assert checks poll after a failed observation at intervals of at most 100ms until the step deadline. `timeoutMs` overrides the Target's `resolveTimeoutMs` for this deadline; zero still evaluates once.
 
-Polling applies to the first stage of first binding, to plan assertions, and to the AI-directed assert tool. It also applies to the two trace replay judgments, one for events and one for verification. Plan assertions cover the three quoted-element checks and the `text-visible` and `url-matches` browser-check path. The AI-directed assert tool and trace replay use the Target's `resolveTimeoutMs`. Each of these makes one final observation after a wait that reaches the deadline, and that observation determines the result.
+Polling applies to the first stage of first binding, to the check of a stored element entry, to plan assertions, and to the AI-directed assert tool. It also applies to the two trace replay judgments, one for events and one for verification. Plan assertions cover the three quoted-element checks and the `text-visible` and `url-matches` browser-check path. The check of a stored element entry, the AI-directed assert tool, and trace replay use the Target's `resolveTimeoutMs`. Each of these makes one final observation after a wait that reaches the deadline, and that observation determines the result.
+
+The single wait for the stored locator to be present, the repeated check of a stored element entry, and first binding share one step deadline. The deadline counts from the step start, and ambercast never restarts it between them.
 
 `element-visible`, `text-equals`, and `element-count` never consult or update grounding or call AI: with or without `--resolve`, they poll `accessibilitySnapshot()` and `matchQuotedCandidates` until their deadline. [repo:src/usecases/run.ts:3071-3184]
 

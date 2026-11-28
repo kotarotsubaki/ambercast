@@ -30,6 +30,8 @@ The normalized locale reaches the plan's target definition and the Playwright br
 
 The setting stops there. It does not set the timezone, an application-side language cookie, or an application preference. It also defines no priority against those mechanisms.
 
+`resolveTimeoutMs` is the deadline in milliseconds for resolving an element in one step, counted from the step start. Waiting once for the stored locator to be present, re-checking a stored entry, and first-binding polling share it. It decides whether ambercast starts another wait; it does not cap a snapshot, an AI dispatch, or the operation.
+
 ## Key table {#key-table}
 
 | key path | type | default | constraint | consumers |
@@ -78,6 +80,8 @@ The `testMatch` and `testIgnore` patterns follow the [pattern language](/amberca
 ## Healing configuration {#heal}
 
 `heal.maxStepRepairs` caps incremental real-provider dispatches. `heal.caseTimeoutMs` is the admission deadline for the whole case.
+
+Waiting inside heal's replays counts toward `heal.caseTimeoutMs`. If `heal.caseTimeoutMs` is smaller than `resolveTimeoutMs`, the baseline replay's wait alone can pass the admission deadline, and then no repair is admitted.
 
 ## Grounding write-back {#grounding}
 

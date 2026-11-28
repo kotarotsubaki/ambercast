@@ -29,7 +29,11 @@ A configuration file that exists must contain a string `$schema`. To see a `list
 
 3. ## Set the element wait \{#set-resolve-timeout}
 
-   Add `"resolveTimeoutMs":<ms>` to a target to set how long resolution waits for an element to be present. The default is `5000`, and the accepted range is `0` to `60000`.
+   Add `"resolveTimeoutMs":<ms>` to a target to set the deadline, in milliseconds, for resolving an element in one step. The deadline counts from the step start. The default is `5000`, and the accepted range is `0` to `60000`.
+
+   Waiting once for the stored locator to be present, re-checking a stored entry, and first-binding polling share this deadline. It decides whether ambercast starts another wait; it does not cap a snapshot, an AI dispatch, or the operation.
+
+   A larger value also lengthens the wait before a step stops. With `0`, ambercast checks once.
 
 4. ## Allow secret origins \{#allow-secret-origins}
 

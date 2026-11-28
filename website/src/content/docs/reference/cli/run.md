@@ -33,6 +33,8 @@ See [Resolve missing grounding](#resolve) for `--resolve` and `--ai`, [Grounding
 | grounding miss, `--resolve` omitted | none | fails closed as `grounding-unresolved` (exit 4) |
 | grounding miss, `--resolve` passed | resolver; `--ai` overrides | live AI resolution and possible write-back |
 
+A stored element entry counts as a miss only if it still does not match at the step deadline. [Waiting for a page to change](/ambercast/explanation/replay-and-grounding/#stored-entry-wait) describes the wait and its limits.
+
 The runtime rejects `--stale=regenerate` before configuration or file I/O. During setup, the runtime composes the browser, environment-backed secrets, configuration, and the provider resolver that `--resolve` can use. Secret values resolve only from `AMBERCAST_SECRET_<NAME>` at a permitted browser sink; `run` never requests generation consent.
 
 ## AI calls {#ai-calls}
@@ -75,7 +77,7 @@ Links: [Configuration](/ambercast/reference/configuration/#grounding), [Reports]
 
 With stored components and unchanged target and structure, neighboring text changing between runs stops zero-AI replay once.
 Rerun `ambercast run --resolve`; once ambercast writes the result back, changes to the neighboring text that differed when ambercast re-resolved the element no longer stop it.
-This covers only that cause: a stop from another cause, such as a page still changing after the previous step, can still happen.
+This covers only that cause: a stop from another cause can still happen.
 This applies to targets with or without an accessible name.
 
 Groundings written before v5 lack components, so expect one extra stop: the first resolve rebuilds a strict entry with components; the next resolve adds ignored slots.

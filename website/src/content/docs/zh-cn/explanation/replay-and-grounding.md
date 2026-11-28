@@ -11,7 +11,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。计算或重新解析元素时，`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。在已保存条目的等待期间，`snapshot-invalid` 视为未命中，会重试到步骤截止时间。已保存条目的比对不会返回 `secret-contaminated`。
 
 回放随后走以下四条路径之一：
 
@@ -19,6 +19,8 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 - 完整性失败：无论是否传入 `--resolve`，都失败关闭。
 - 可恢复的未命中且带 `--resolve`：实时解析。
 - 可恢复的未命中且不带 `--resolve`：以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。
+
+元素条目直到步骤截止时间仍不匹配，才算未命中。详见[等待页面切换](#stored-entry-wait)。
 
 相关链接：[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)、[元素指纹](/ambercast/zh-cn/spec/fingerprint/)、[ambercast run](/ambercast/zh-cn/reference/cli/run/#ai-calls)
 
@@ -54,9 +56,27 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 相关链接：[ambercast run](/ambercast/zh-cn/reference/cli/run/#resolve)、[读取结构化输出](/ambercast/zh-cn/agents/reading-structured-output/#decision-tree)
 
+## 等待页面切换 {#stored-entry-wait}
+
+已保存的元素条目与当前页面不一致时，ambercast 不会因为第一次比对失败就判定为未命中。出现不一致后，它最多等待 100 ms，然后重新比对，直到条目匹配或步骤截止时间已过。比对本身另外耗时。
+
+截止时间是步骤开始时刻加上目标的 `resolveTimeoutMs`。上一步的操作仍在切换页面时，只要页面切换完成后条目能够匹配，该步骤仍无需调用 AI 即可继续回放。
+
+等待不会改变匹配的判定标准。ambercast 沿用不等待时的同一套规则，包括已保存的忽略槽位，并且不会操作不匹配的元素。
+
+到截止时间条目仍不匹配，该步骤即为未命中。不带 `--resolve` 时，回放以 `GROUNDING_UNRESOLVED` 停止，退出码为 4。带 `--resolve` 时，ambercast 实时解析该元素。
+
+因此，页面确实已经变化的步骤，也会先等完截止时间的剩余部分，再停止或重新解析。调大 `resolveTimeoutMs` 会延长这段等待，上限为 `60000`。取 `0` 时只比对一次。
+
+这里有两个限制。第一，指纹按 role 和名称覆盖目标、它的父元素和相邻的兄弟元素。指纹不标识页面，也不标识记录。
+
+等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之前添加 `assert` 步骤，检查只有新页面才有的内容。断言会反复检查到步骤截止时间，因此操作只会在新页面出现之后执行。
+
+第二，页面切换晚于截止时间时，不带 `--resolve` 的回放会停止，请调大该目标的 `resolveTimeoutMs`。带 `--resolve` 时，ambercast 按截止时间那一刻的页面重新解析，而那一刻的页面可能仍是正在离开的页面。
+
 ## 每次回放都变化的邻近文字 {#changing-neighbor-text}
 
-已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列，例如上一步引起的页面切换尚未完成。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
+已有成分且目标和结构不变时，如果只有邻近文字在每次回放间变化，首次无 AI 回放会停止一次。再次运行 `ambercast run --resolve`，并成功写回定位缓存后，重新确定目标时发现不同的邻近文字，其变化不会再使该元素的回放停止。其他原因造成的停止不在此列。因此不保证该元素此后一定无需 AI 即可回放。目标是否有无障碍名称都适用。
 
 v5 之前写入的定位缓存没有成分，因此会多停止一次。第一次 resolve 只重建含成分的严格记录项。下一次 resolve 才添加忽略槽位。
 

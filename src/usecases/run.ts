@@ -99,6 +99,7 @@ import type {
   AccessibilityCapture,
   BoundElement,
   BrowserSession,
+  GroundedResolution,
   UiExecutor,
   GroundingMissReason,
   PerformableAction,
@@ -2871,20 +2872,46 @@ async function executeAiStep(
  * v3 element entry whose `intentDigest` equals `computeIntentDigest(step)`.
  * Absence, another kind, or a digest mismatch means no entry for this step;
  * none invalidates the whole grounding document. For a confirmed entry,
- * await its locator's presence with the remaining step budget and verify-bind
- * against its fingerprint. A hit returns the operation-ready element without
- * AI and reports `grounding` provenance. A missing entry with `--resolve` off
- * throws `GroundingUnresolvedError` with reason `missing`; a verify miss with
- * `--resolve` off uses reason `recoverable-miss`. Both exit 4 and perform no
+ * await its locator's presence once with the remaining step budget, then
+ * verify-bind against its fingerprint, repeating the verification until it
+ * hits or the step deadline is spent. A hit on any attempt returns the
+ * operation-ready element without AI and reports `grounding` provenance. A
+ * missing entry with `--resolve` off throws `GroundingUnresolvedError` with
+ * reason `missing`; a final verification that returns a miss, whatever its
+ * reason, with `--resolve` off uses reason `recoverable-miss`. Both exit 4 and perform no
  * operation for this step.
  *
+ * Repeating the verification is what lets a replay survive a page that is
+ * still switching when the step starts: the stored entry describes the page
+ * the step will act on, and a screen that is mid-transition can disagree with
+ * it for a moment without the entry being stale. The repetition uses the same
+ * bounded polling loop as the first-binding observations, so spacing, the
+ * unconditional final attempt, and the abort check before every attempt
+ * behave identically. The presence wait is not re-issued between attempts,
+ * and the query handed to the port is the stored entry's own values on every
+ * attempt. Whatever the miss reason was on an earlier attempt, only the last
+ * attempt decides the outcome: it alone supplies the diagnostics of a
+ * `recoverable-miss` and the reason that gates exclusion of drifting
+ * neighbor names. A port exception from either call propagates unchanged
+ * rather than being retried. An abort is also honored while waiting between
+ * attempts; once it is observed, no further verification, re-resolution, AI
+ * call, or operation happens. An abort that arrives while a verification is in
+ * flight is not re-checked after a hit, because the port takes no signal.
+ *
  * The sole waiting deadline is step start plus `resolveTimeoutMs`. Presence
- * waiting for the old locator and first-binding stage 1 share it. After a
- * verify miss, stage 1 receives only the remaining time. Its first snapshot
- * is always taken, including at zero remaining time. A matching observation
- * ends polling immediately; otherwise another wait occurs only while time
- * remains. When a wait consumes the remaining budget, one more snapshot is
- * taken unconditionally and judged even if the real timer overruns.
+ * waiting for the old locator, the repeated verification, and first-binding
+ * stage 1 share it; none of them re-counts time, and the deadline only
+ * decides whether another wait may start rather than capping real elapsed
+ * time. With `--resolve` on, re-resolution after the last verify miss starts
+ * from whatever time remains and does not inherit the repetition's "final
+ * wait taken" state, because that loop's termination applies only to its own
+ * attempts. Stage 1 therefore receives only the remaining time. Its first
+ * snapshot is always taken, including at zero remaining time. A matching
+ * observation ends polling immediately; otherwise another wait occurs only
+ * while time remains. When a wait consumes the remaining budget, one more
+ * snapshot is taken unconditionally and judged even if the real timer
+ * overruns. When the repetition has already spent the deadline, stage 1 is
+ * therefore a single observation.
  *
  * With `--resolve` on and no usable entry, first binding has four stages:
  *
@@ -2990,19 +3017,27 @@ async function groundedTarget(
   // rules. A hit retains the stored fingerprint, components, and exclusions
   // in BindingState for persistence, while its live handle uses current full
   // evidence. No hit refreshes an entry or backfills missing components.
-  // A stored miss reason survives to the re-resolution merge below;
-  // diagnostics from the earlier observation must not choose new exclusions.
+  // The reason of the last verify attempt survives to the re-resolution merge
+  // below; an earlier attempt's reason, taken mid-transition, must not choose
+  // new exclusions, and diagnostics from the replacement observation must not
+  // either.
   let storedMissReason: string | undefined;
   if (stored !== undefined) {
     await session.awaitElementPresence(stored.locator, Math.max(0, deadlineMs - context.clock.monotonicMs()));
-    const verified = await session.resolveGrounded(stored.locator, { mode: 'verify', fingerprint: stored.fingerprint, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }) });
+    const query = { mode: 'verify' as const, fingerprint: stored.fingerprint, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }) };
+    const verified = await pollUntilDeadline(context, deadlineMs, async () => {
+      const attempt = await session.resolveGrounded(stored.locator, query);
+      // Use type assertion because TypeScript cannot narrow the union across the conditional
+      return attempt.kind === 'hit' ? { done: true, value: attempt as GroundedResolution } : { done: false, last: attempt as GroundedResolution };
+    }) as GroundedResolution;
     if (verified.kind === 'hit') {
       context.bindingStates.set(step.id, { stage: 'acted', locator: stored.locator, fingerprint: stored.fingerprint, storedEntry: stored, ...(stored.components === undefined ? {} : { components: stored.components }), ...(stored.ignoredNames === undefined ? {} : { ignoredNames: stored.ignoredNames }), provenance: 'grounding' });
       context.resolvedVias.set(step.id, 'grounding');
       return verified.element;
     }
     storedMissReason = verified.reason;
-    // This stop point owns diagnostic combinations: only a known fingerprint
+    // Only the final verification supplies the failure diagnostics; earlier
+    // misses contribute no evidence to this result. This stop point owns diagnostic combinations: only a known fingerprint
     // difference justifies difference evidence. Closed slot identities explain
     // the miss without disclosing current screen text.
     if (!context.resolve) {

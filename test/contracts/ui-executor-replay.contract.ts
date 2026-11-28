@@ -42,13 +42,21 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       const prompt = '# Replay\n\nClick Submit and see Ready.\n';
       const storage = createInMemoryStorage();
       const layout = createLayoutResolver({ testDir: root, runsDir: `${root}/.runs` });
-      await storage.writeText(`${root}/ambercast.config.json`, JSON.stringify({
-        $schema: 'https://ambercast.dev/schema/config.json', testDir: root, runsDir: `${root}/.runs`,
-        targets: { app: { baseUrl: harness.target.baseUrl } }, defaultTarget: 'app',
-        grounding: { localWriteBack: 'explicit' },
-      }));
-      const loaded = await loadConfig({ cwd: root, storage });
-      const config = 'resolved' in loaded ? loaded.resolved : loaded;
+      /**
+       * Divergent runs pin the step deadline to zero so the stored-entry check
+       * runs exactly once: with a positive deadline the number of repeated
+       * checks depends on the clock (virtual in the fake, real in Chromium),
+       * and the contract asserts the single-check refusal shape, not the wait.
+       */
+      const loadConfigWith = async (resolveTimeoutMs: number | undefined) => {
+        await storage.writeText(`${root}/ambercast.config.json`, JSON.stringify({
+          $schema: 'https://ambercast.dev/schema/config.json', testDir: root, runsDir: `${root}/.runs`,
+          targets: { app: { baseUrl: harness.target.baseUrl, ...(resolveTimeoutMs === undefined ? {} : { resolveTimeoutMs }) } }, defaultTarget: 'app',
+          grounding: { localWriteBack: 'explicit' },
+        }));
+        const loaded = await loadConfig({ cwd: root, storage });
+        return 'resolved' in loaded ? loaded.resolved : loaded;
+      };
       const targets = { app: harness.target };
       const plan: PlanDocument = {
         schemaVersion: 5,
@@ -73,7 +81,8 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       await storage.writeText(layout.planPathFor(file), toCanonicalArtifactText(plan as JsonValueT));
       await storage.writeText(layout.groundingPathFor(file), toCanonicalArtifactText(grounding as JsonValueT));
       const planBytes = await storage.readText(layout.planPathFor(file));
-      const execute = async (factory: UiExecutorFactory, resolve: boolean) => {
+      const execute = async (factory: UiExecutorFactory, resolve: boolean, resolveTimeoutMs?: number) => {
+        const config = await loadConfigWith(resolveTimeoutMs);
         const events = createRecordingEventSink();
         const factorySpy = vi.fn(factory);
         const deps: RunDeps = {
@@ -114,7 +123,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       expect(s2.groundingBytes).toBe(s1.groundingBytes);
       if (stage === 2) return;
 
-      const s3 = await execute(harness.divergentObservationFactory, false);
+      const s3 = await execute(harness.divergentObservationFactory, false, 0);
       expect(s3.outcome.results[0]?.result).toMatchObject({ status: 'error', aiCalls: 0 });
       expect(s3.outcome.results[0]?.error).toMatchObject({ kind: 'grounding-unresolved', exitCode: 4, details: { stepId: 'click-submit', reason: 'recoverable-miss' } });
       const s3Error = s3.outcome.results[0]?.error;
@@ -132,7 +141,7 @@ export function registerUiExecutorReplayContract(harness: UiExecutorReplayHarnes
       }
       if (stage === 3) return;
 
-      const s4 = await execute(harness.divergentObservationFactory, true);
+      const s4 = await execute(harness.divergentObservationFactory, true, 0);
       expect(s4.outcome.results[0]?.result).toMatchObject({ status: 'passed', aiCalls: 1 });
       expect(s4.events.filter((event) => event.type === 'step-result')).toContainEqual({ type: 'step-result', stepId: 'click-submit', via: 'ai-proposed' });
       expect(s4.events.filter((event) => event.type === 'ai-call')).toHaveLength(1);

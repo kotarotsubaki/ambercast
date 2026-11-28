@@ -1,0 +1,434 @@
+{
+  "generatorMeta": {
+    "planProducerBundle": {
+      "components": {
+        "elementIntentPolicyRevision": 1,
+        "generatedPlanResponseLocalContract": "c531ed095c2b3b48760bea36e6ee566438c5da5f95a8f120d104ab0ec6417ccc",
+        "generatedPlanResponseSchema": "0f7cf68f9f6b1c5244273b99cecbcc2a4b9d03f8d7c470592c725d7217bd2c64",
+        "generatorPromptTemplate": "35ffade719a6bd62db243d57fa76c10ca83f7df17da82d92b8e7250b433429c5",
+        "generatorSecretPolicyRevision": 5,
+        "generatorTaskInstruction": "730ab212ad679bc42a03e56a6cc5f9247d586b0dbdda4e5fa14f4996c1a50180",
+        "instructionCoveragePolicyRevision": 3
+      },
+      "fingerprint": "2813562340845d7d78a8c46b0417ed2fac4571f88d2b270c388983c77af15020"
+    }
+  },
+  "schemaVersion": 5,
+  "source": {
+    "inputsDigest": "38831aa23613764a08719e5872accd0cc44abd53d7eab40b469275ea83da0c5c"
+  },
+  "steps": [
+    {
+      "action": "navigate",
+      "id": "open-sign-in",
+      "kind": "action",
+      "target": "memos",
+      "url": "http://127.0.0.1:5230/auth"
+    },
+    {
+      "action": "fill",
+      "id": "fill-username",
+      "intent": {
+        "description": "Username input on the sign-in page",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 52,
+            "endLine": 3,
+            "startColumn": 44,
+            "startLine": 3
+          },
+          "text": "verifier"
+        },
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 53,
+          "endLine": 3,
+          "startColumn": 24,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "verifier"
+    },
+    {
+      "action": "fill-secret",
+      "id": "fill-password",
+      "intent": {
+        "description": "Password input on the sign-in page",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 76,
+          "endLine": 3,
+          "startColumn": 58,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "secretRef": "{{secrets.password}}",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-sign-in",
+      "intent": {
+        "description": "Sign in button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 97,
+            "endLine": 3,
+            "startColumn": 90,
+            "startLine": 3
+          },
+          "text": "Sign in"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 3,
+          "startColumn": 83,
+          "startLine": 3
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-sign-in"
+      ],
+      "id": "assert-save-button-visible",
+      "intent": {
+        "description": "Save button is displayed after signing in",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 121,
+            "endLine": 3,
+            "startColumn": 117,
+            "startLine": 3
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 129,
+          "endLine": 3,
+          "startColumn": 112,
+          "startLine": 3
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-username",
+        "fill-password",
+        "click-sign-in"
+      ],
+      "id": "assert-verifier-visible",
+      "kind": "assert",
+      "target": "memos",
+      "text": "verifier"
+    },
+    {
+      "action": "fill",
+      "id": "fill-memo-editor",
+      "intent": {
+        "description": "Memo editor",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 52,
+          "endLine": 4,
+          "startColumn": 37,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast edit original"
+    },
+    {
+      "action": "click",
+      "id": "click-save",
+      "intent": {
+        "description": "Save button of the memo editor",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 68,
+            "endLine": 4,
+            "startColumn": 64,
+            "startLine": 4
+          },
+          "text": "Save"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 69,
+          "endLine": 4,
+          "startColumn": 57,
+          "startLine": 4
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-memo-editor",
+        "click-save"
+      ],
+      "id": "assert-memo-in-list",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast edit original"
+    },
+    {
+      "action": "click",
+      "id": "click-search",
+      "intent": {
+        "description": "Search button in the sidebar",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 39,
+          "endLine": 5,
+          "startColumn": 11,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "fill",
+      "id": "fill-search-box",
+      "intent": {
+        "description": "Search box",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 82,
+          "endLine": 5,
+          "startColumn": 68,
+          "startLine": 5
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast edit"
+    },
+    {
+      "action": "press",
+      "id": "press-enter-search",
+      "intent": {
+        "description": "Press Enter in the search box to run the search",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 98,
+          "endLine": 5,
+          "startColumn": 87,
+          "startLine": 5
+        }
+      },
+      "key": "Enter",
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "click-search",
+        "fill-search-box",
+        "press-enter-search"
+      ],
+      "id": "assert-search-result",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast edit original"
+    },
+    {
+      "action": "click",
+      "id": "click-now-button",
+      "intent": {
+        "description": "The \"now\" button of the only memo in the list, opening its page",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 15,
+            "endLine": 6,
+            "startColumn": 12,
+            "startLine": 6
+          },
+          "text": "now"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 40,
+          "endLine": 6,
+          "startColumn": 7,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-memo-menu",
+      "intent": {
+        "description": "Menu of the memo",
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 96,
+          "endLine": 6,
+          "startColumn": 71,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-memo-menu"
+      ],
+      "id": "assert-edit-menu-item",
+      "intent": {
+        "description": "Edit menu item is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 119,
+            "endLine": 6,
+            "startColumn": 115,
+            "startLine": 6
+          },
+          "text": "Edit"
+        },
+        "roleHint": "menuitem",
+        "sourceSpan": {
+          "endColumn": 130,
+          "endLine": 6,
+          "startColumn": 110,
+          "startLine": 6
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "action": "click",
+      "id": "click-edit",
+      "intent": {
+        "description": "Edit menu item",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 157,
+            "endLine": 6,
+            "startColumn": 153,
+            "startLine": 6
+          },
+          "text": "Edit"
+        },
+        "roleHint": "menuitem",
+        "sourceSpan": {
+          "endColumn": 158,
+          "endLine": 6,
+          "startColumn": 145,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "element-visible",
+      "confirms": [
+        "click-edit"
+      ],
+      "id": "assert-update-button",
+      "intent": {
+        "description": "Update button is displayed",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 183,
+            "endLine": 6,
+            "startColumn": 177,
+            "startLine": 6
+          },
+          "text": "Update"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 191,
+          "endLine": 6,
+          "startColumn": 172,
+          "startLine": 6
+        }
+      },
+      "kind": "assert",
+      "target": "memos"
+    },
+    {
+      "action": "fill",
+      "id": "fill-memo-text",
+      "intent": {
+        "description": "Memo text editor",
+        "roleHint": "textbox",
+        "sourceSpan": {
+          "endColumn": 227,
+          "endLine": 6,
+          "startColumn": 214,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos",
+      "value": "ambercast edit updated"
+    },
+    {
+      "action": "click",
+      "id": "click-update",
+      "intent": {
+        "description": "Update button",
+        "quote": {
+          "sourceSpan": {
+            "endColumn": 275,
+            "endLine": 6,
+            "startColumn": 269,
+            "startLine": 6
+          },
+          "text": "Update"
+        },
+        "roleHint": "button",
+        "sourceSpan": {
+          "endColumn": 276,
+          "endLine": 6,
+          "startColumn": 262,
+          "startLine": 6
+        }
+      },
+      "kind": "action",
+      "target": "memos"
+    },
+    {
+      "check": "text-visible",
+      "confirms": [
+        "fill-memo-text",
+        "click-update"
+      ],
+      "id": "assert-updated-text",
+      "kind": "assert",
+      "target": "memos",
+      "text": "ambercast edit updated"
+    }
+  ],
+  "targets": {
+    "memos": {
+      "baseUrl": "http://127.0.0.1:5230",
+      "locale": "en-US",
+      "surface": "web"
+    }
+  }
+}

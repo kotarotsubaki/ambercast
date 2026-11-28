@@ -21,6 +21,7 @@ const expectedCases = [
 ];
 const expectedReplayIds = [
   'memos-sign-in-create-memo',
+  'memos-edit-memo',
   'memos-delete-memo',
   'memos-search-memos',
   'memos-tag-filter',
@@ -47,13 +48,10 @@ function fixturePairProblems(dir: URL, marked: readonly string[] = []): string[]
 const markedIds = ((await harnessExports()).CASES as { id: string; knownIssue?: number }[])
   .filter(c => c.knownIssue !== undefined).map(c => c.id);
 describe('committed Memos replay readiness', () => {
-  it('TEST-HARNESS-3 registers seven cases and selects six with only edit-memo marked #722', async () => {
+  it('TEST-MEMOS-1 registers seven cases, marks none, and selects all seven in order', async () => {
     const { CASES, parseArgs } = await harnessExports();
     expect((CASES as { id: string; target: string }[]).map(({ id, target }) => ({ id, target }))).toEqual(expectedCases);
-    expect((CASES as { id: string; target: string; knownIssue?: number }[])
-      .filter(c => c.knownIssue !== undefined)).toEqual([
-      { id: 'memos-edit-memo', target: 'memos', knownIssue: 722 },
-    ]);
+    expect((CASES as { id: string; knownIssue?: number }[]).filter(c => c.knownIssue !== undefined)).toEqual([]);
     expect((parseArgs as (args: string[]) => { cases: string[] })([]).cases).toEqual(expectedReplayIds);
   });
   for (const id of expectedReplayIds) {
@@ -68,12 +66,6 @@ describe('committed Memos replay readiness', () => {
       expect(readiness.status, `${id}: ${JSON.stringify(readiness)}`).toBe('ready');
     });
   }
-  it('TEST-HARNESS-3 leaves edit-memo without a plan or grounding', () => {
-    // Issue #722 covers the navigation-timing stop outside this change.
-    for (const suffix of planSuffixes) {
-      expect(existsSync(new URL(`tests/ambercast/memos-edit-memo${suffix}`, fixture))).toBe(false);
-    }
-  });
 });
 describe('regeneration documentation', () => {
   it('TEST-HARNESS-2 omits the pre-resolve confirms coverage check', () => {

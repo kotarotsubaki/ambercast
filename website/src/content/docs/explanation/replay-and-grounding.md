@@ -11,7 +11,7 @@ Replay reuses what ambercast recorded. Where the record is missing or unusable, 
 
 An element entry stores a locator, a fingerprint, an intent digest, and provenance. Resolution uses the stored locator and checks the fingerprint. The [Grounding document](/ambercast/spec/grounding-document/) defines the entry shape.
 
-The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. Saved ignored slots permit the bounded match described below. `snapshot-invalid` and `secret-contaminated` abort the case.
+The resolver tells a hit apart from `fingerprint-mismatch`, `element-not-found`, `ambiguous-match`, `snapshot-invalid`, and `secret-contaminated`. Saved ignored slots permit the bounded match described below. When ambercast computes or re-resolves an element, `snapshot-invalid` and `secret-contaminated` abort the case. During a stored-entry wait, `snapshot-invalid` is a miss that is retried until the step deadline. Stored-entry verification does not return `secret-contaminated`.
 
 Replay then follows one of four paths:
 
@@ -70,7 +70,7 @@ A step whose page really changed therefore also waits for the rest of the deadli
 
 Two limits apply. First, the fingerprint covers the target, its parent, and its adjacent siblings by role and name. It does not identify the page or the record.
 
-If the page being left shows the same roles and names around a same-named element while ambercast waits, that element matches and ambercast acts on it. When this matters, assert something that only the new page shows after the action.
+If the page being left shows the same roles and names around a same-named element while ambercast waits, that element matches and ambercast acts on it. When this matters, add an `assert` step before the action that checks something only the new page shows. The assertion polls until the step deadline, so the action runs only after the new page appears.
 
 Second, a page that changes later than the deadline stops a replay without `--resolve`; raise `resolveTimeoutMs` for that target. With `--resolve`, ambercast re-resolves from the page as it is at the deadline, which can still be the page being left.
 

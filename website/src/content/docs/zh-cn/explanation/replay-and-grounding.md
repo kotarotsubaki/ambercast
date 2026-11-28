@@ -11,7 +11,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。计算或重新解析元素时，`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。在已保存条目的等待期间，`snapshot-invalid` 视为未命中，会重试到步骤截止时间。已保存条目的比对不会返回 `secret-contaminated`。
 
 回放随后走以下四条路径之一：
 
@@ -70,7 +70,7 @@ description: 回放复用已记录的定位缓存，因此完全覆盖的运行�
 
 这里有两个限制。第一，指纹按 role 和名称覆盖目标、它的父元素和相邻的兄弟元素。指纹不标识页面，也不标识记录。
 
-等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之后断言只有新页面才有的内容。
+等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之前添加 `assert` 步骤，检查只有新页面才有的内容。断言会反复检查到步骤截止时间，因此操作只会在新页面出现之后执行。
 
 第二，页面切换晚于截止时间时，不带 `--resolve` 的回放会停止，请调大该目标的 `resolveTimeoutMs`。带 `--resolve` 时，ambercast 按截止时间那一刻的页面重新解析，而那一刻的页面可能仍是正在离开的页面。
 

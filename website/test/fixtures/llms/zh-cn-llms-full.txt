@@ -4303,7 +4303,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/spec/changelog/
 
 | 变更 | 证据 | 迁移义务 |
 | --- | --- | --- |
-| 带截止时间的轮询也适用于已保存元素条目的比对。出现未命中后，ambercast 最多等待 100ms 后重新比对，直到条目匹配或步骤截止时间已过；比对本身另需时间。截止前匹配则回放继续，不匹配则停止或重新解析。定位缓存、执行计划、报告和配置的格式不变。 | `repo:src/usecases/run.ts` | 无需迁移。依赖已保存条目未命中后立即停止的测试，需要预留最长 `resolveTimeoutMs` 的等待。 |
+| 带截止时间的轮询也适用于已保存元素条目的比对。出现未命中后，ambercast 最多等待 100ms 后重新比对，直到条目匹配或步骤截止时间已过；比对本身另需时间。截止时间的最终观测匹配则回放继续，不匹配则停止或重新解析。定位缓存、执行计划、报告和配置的格式不变。 | `repo:src/usecases/run.ts` | 无需迁移。依赖已保存条目未命中后立即停止的测试，需要预留最长 `resolveTimeoutMs` 的等待。 |
 | report 3.12 → 3.13 新增步骤 `binding.ignoredNames`、`neighbor-name-ignored` 警告，以及 recoverable-miss 的 `verification`、`difference` 和 `changedNames`。 | `repo:src/report/schema.ts`, `repo:src/usecases/run.ts` | 已保存的 3.12 及更早报告仍可读取，不补充新字段。新输出和公开 Schema 只接受 3.13。 |
 | 定位缓存 v4 → v5 为元素记录项添加可选的 `components` 和 `ignoredNames`。跨次回放可使用已保存的邻近名称忽略槽位；同次回放的操作仍由完整指纹保护。 | `src/core/ir/schema.ts`、`src/core/ir/fingerprint.ts` | v4 仍可读取，无须重新生成。新写入的文档使用 v5；没有改动的运行保持文件不变。v5 Schema 仅接受 v5，v4 Schema 保持冻结。旧版 ambercast 无法读取 v5；回退时通过 `ambercast run --resolve --update-cache` 重新生成定位缓存。 |
 | report 3.11 → 3.12 新增可选的 `replayReadiness`。 | `repo:src/report/schema.ts:58` | 没有此字段的旧版报告仍可读取。执行计划 5 和定位缓存 4 不变，无需重新生成。 |
@@ -4420,7 +4420,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 元素条目保存定位器、指纹、意图摘要和出处。解析时使用保存的定位器并校验指纹。条目的结构见[定位缓存文档](/ambercast/zh-cn/spec/grounding-document/)。
 
-解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。
+解析器会区分命中与 `fingerprint-mismatch`、`element-not-found`、`ambiguous-match`、`snapshot-invalid`、`secret-contaminated`。已保存的忽略槽位允许按下述有限规则匹配。计算或重新解析元素时，`snapshot-invalid` 和 `secret-contaminated` 会中止该用例。在已保存条目的等待期间，`snapshot-invalid` 视为未命中，会重试到步骤截止时间。已保存条目的比对不会返回 `secret-contaminated`。
 
 回放随后走以下四条路径之一：
 
@@ -4479,7 +4479,7 @@ Source: https://kotarotsubaki.github.io/ambercast/zh-cn/explanation/replay-and-g
 
 这里有两个限制。第一，指纹按 role 和名称覆盖目标、它的父元素和相邻的兄弟元素。指纹不标识页面，也不标识记录。
 
-等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之后断言只有新页面才有的内容。
+等待期间，如果正在离开的页面在同名元素周围显示相同的 role 和名称，该元素会匹配，ambercast 会操作它。这个差别有影响时，请在操作之前添加 `assert` 步骤，检查只有新页面才有的内容。断言会反复检查到步骤截止时间，因此操作只会在新页面出现之后执行。
 
 第二，页面切换晚于截止时间时，不带 `--resolve` 的回放会停止，请调大该目标的 `resolveTimeoutMs`。带 `--resolve` 时，ambercast 按截止时间那一刻的页面重新解析，而那一刻的页面可能仍是正在离开的页面。
 
